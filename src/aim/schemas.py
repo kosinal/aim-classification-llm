@@ -6,9 +6,6 @@ from pydantic import BaseModel, Field
 class AssessRequest(BaseModel):
     """Request schema for content assessment."""
 
-    project_id: str = Field(
-        ..., example="1", description="Project ID (1-4)", min_length=1
-    )
     summary: str = Field(
         ...,
         example="Budget concerns regarding the new marketing initiative.",
