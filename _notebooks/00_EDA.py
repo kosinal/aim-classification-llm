@@ -19,9 +19,12 @@ import pandas as pd
 from pathlib import Path
 from openai import AzureOpenAI
 from tqdm import tqdm
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 # %%
-# #!poetry add pandas --group dev
+# #!poetry add seaborn --group dev
 
 # %%
 
@@ -56,17 +59,18 @@ pos_data["label"] = "positive"
 
 # %%
 neg_data = pd.DataFrame(input_data['negatives'])
-neg_data["label"] = "negatives"
+neg_data["label"] = "negative"
 
 # %%
-all_data = pd.concat([pos_data, neg_data])
+all_data = pd.concat([pos_data, neg_data], ignore_index=True)
 
 # %%
 all_data
 
 # %%
 # Too slow for now, would take too long for make it faster for 1MD assignment
-# 
+# Also it seems all sumary is in English only, so lets try leverage this.
+#
 # def translate_to_english(text):
 #     """Translate text to English using Azure OpenAI. Returns original if already in English."""
 #     if pd.isna(text) or text == "null" or not text:
@@ -133,14 +137,48 @@ all_data['flag_note'] = notes_vals
 all_data['flag_insightful'] = insightful_vals
 
 # %%
-all_data[(all_data.flag_insightful != "") & (all_data.label == "negatives")]
+all_data[(all_data.flag_insightful != "") & (all_data.label == "negative")]
 
 # %%
-all_data[(all_data.flag_insightful != "") & (all_data.label != "negatives")]
+all_data[(all_data.flag_insightful != "") & (all_data.label != "negative")]
 
 # %%
 # Ok, flags are only for negatives, so it wont help us much
 
-# %%
+# %% [markdown]
+# # Confusion Matrix: isFlagged vs Label
 
 # %%
+# Additional statistics about the relationship
+print("Distribution Analysis:")
+print("=" * 60)
+
+# Count by label
+print("\nCounts by label:")
+print(all_data['label'].value_counts())
+
+# Count by isFlagged
+print("\nCounts by isFlagged:")
+print(all_data['isFlagged'].value_counts())
+
+# Cross-tabulation
+print("\nCross-tabulation (label vs isFlagged):")
+ct = pd.crosstab(all_data['label'], all_data['isFlagged'], margins=True)
+print(ct)
+
+# Percentage breakdown
+print("\nPercentage breakdown:")
+ct_pct = pd.crosstab(all_data['label'], all_data['isFlagged'], normalize='index') * 100
+print(ct_pct.round(2))
+
+# %%
+all_data.drop(["flag_note", "flags", "flag_insightful", "id", "isFlagged"], axis=1, inplace=True)
+
+# %%
+#Ok, so it is duplicate
+
+# %%
+all_data.info()
+
+# %%
+all_data.to_parquet(data_folder / "data.parquet")
