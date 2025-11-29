@@ -83,23 +83,33 @@ The Dockerfile uses a multi-stage build for optimal image size and security:
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `AIM_OPENAI_KEY` | Yes | - | Azure OpenAI API key |
-| `AZURE_ENDPOINT` | Yes | - | Azure OpenAI endpoint URL |
+| `AZURE_ENDPOINT` | No | `https://aim-australia-east.openai.azure.com/` | Azure OpenAI endpoint URL |
 | `AZURE_MODEL_NAME` | No | `gpt-5-mini-hiring` | Azure model deployment name |
 | `AZURE_API_VERSION` | No | `2025-03-01-preview` | Azure API version |
 
-### Volumes
+**Note**: Model definitions are baked into the Docker image during build. The Dockerfile copies `src/aim/` to `/app/aim/`, including all model definition files.
 
-**Model Definitions** (required):
-```bash
-# Mount model definitions directory
--v ./src/aim/model_definitions:/app/src/aim/model_definitions:ro
+### Network Configuration
+
+The docker-compose.yml creates a custom bridge network (`app-network`) for container communication:
+
+```yaml
+networks:
+  app-network:
+    driver: bridge
 ```
 
-**Source Code** (development only):
-```bash
-# Mount source for live code updates
--v ./src:/app/src:ro
+This allows you to add additional services (databases, monitoring, etc.) that can communicate with the API container by name.
+
+### Restart Policy
+
+The default restart policy is `unless-stopped`, meaning the container will automatically restart unless explicitly stopped:
+
+```yaml
+restart: unless-stopped
 ```
+
+For production, you may want to use `restart: always` in your production override file.
 
 ## Production Deployment
 
@@ -138,9 +148,6 @@ services:
         reservations:
           cpus: '1.0'
           memory: 1G
-    # Remove development volume mounts
-    volumes:
-      - ./src/aim/model_definitions:/app/src/aim/model_definitions:ro
     logging:
       driver: "json-file"
       options:
@@ -170,10 +177,13 @@ CMD ["uvicorn", "aim.main:app", \
     "--host", "0.0.0.0", \
     "--port", "8000", \
     "--workers", "8",  # Adjust based on CPU cores
-    "--log-level", "info"]
+    "--log-level", "info", \
+    "--no-access-log"]  # Disables access logs for better performance
 ```
 
 **Recommended workers**: `(2 * CPU_CORES) + 1`
+
+**Note**: The `--no-access-log` flag is enabled by default to reduce log verbosity and improve performance. Remove it if you need detailed access logs.
 
 ### Resource Limits
 
@@ -197,8 +207,7 @@ docker logs aim-classifier-api
 
 # Common issues:
 # 1. Missing environment variables
-# 2. Model files not mounted correctly
-# 3. Port 8000 already in use
+# 2. Port 8000 already in use
 ```
 
 ### Health Check Failing
@@ -215,234 +224,8 @@ docker exec aim-classifier-api python -c "from aim.main import app; print(app.st
 
 ```bash
 # Verify model files are accessible
-docker exec aim-classifier-api ls -la /app/src/aim/model_definitions/
+docker exec aim-classifier-api ls -la /app/aim/model_definitions/
 
 # Check file permissions
-docker exec aim-classifier-api stat /app/src/aim/model_definitions/flag_classifier_project_project_2.json
+docker exec aim-classifier-api stat /app/aim/model_definitions/flag_classifier_project_project_2.json
 ```
-
-### Performance Issues
-
-```bash
-# Check resource usage
-docker stats aim-classifier-api
-
-# View running processes
-docker top aim-classifier-api
-
-# Increase resources if needed
-docker update --cpus="4.0" --memory="4g" aim-classifier-api
-```
-
-## Security Best Practices
-
-### Image Security
-
-```bash
-# Scan for vulnerabilities
-docker scan aim-classifier-api:latest
-
-# Use specific Python version (not latest)
-# Already configured: python:3.11-slim
-
-# Run as non-root user
-# Already configured: USER appuser
-```
-
-### Runtime Security
-
-```bash
-# Run with read-only root filesystem
-docker run -d \
-  --read-only \
-  --tmpfs /tmp \
-  -p 8000:8000 \
-  aim-classifier-api:latest
-
-# Drop unnecessary capabilities
-docker run -d \
-  --cap-drop=ALL \
-  --cap-add=NET_BIND_SERVICE \
-  -p 8000:8000 \
-  aim-classifier-api:latest
-```
-
-### Secrets Management
-
-**DO NOT** hardcode secrets in Dockerfile or docker-compose.yml:
-
-```bash
-# Use Docker secrets (Swarm mode)
-docker secret create aim_openai_key -
-# Paste your key, then Ctrl+D
-
-# Or use environment file
-docker run -d --env-file .env.production aim-classifier-api:latest
-```
-
-## Integration with CI/CD
-
-### GitHub Actions Example
-
-```yaml
-name: Build and Push Docker Image
-
-on:
-  push:
-    branches: [main]
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Build Docker image
-        run: docker build -t aim-classifier-api:${{ github.sha }} .
-
-      - name: Run tests in container
-        run: |
-          docker run --rm \
-            -e AIM_OPENAI_KEY=${{ secrets.AIM_OPENAI_KEY }} \
-            aim-classifier-api:${{ github.sha }} \
-            pytest tests/
-
-      - name: Push to registry
-        run: |
-          echo ${{ secrets.DOCKER_TOKEN }} | docker login -u ${{ secrets.DOCKER_USER }} --password-stdin
-          docker push aim-classifier-api:${{ github.sha }}
-```
-
-## Maintenance
-
-### Update Dependencies
-
-```bash
-# Rebuild with updated dependencies
-docker-compose build --no-cache
-
-# Or using Docker CLI
-docker build --no-cache -t aim-classifier-api:latest .
-```
-
-### Clean Up
-
-```bash
-# Remove stopped containers
-docker-compose down
-
-# Remove images
-docker rmi aim-classifier-api:latest
-
-# Clean up build cache
-docker builder prune
-
-# Full cleanup (careful!)
-docker system prune -a --volumes
-```
-
-## Monitoring and Logging
-
-### View Logs
-
-```bash
-# Follow logs in real-time
-docker-compose logs -f
-
-# View specific service logs
-docker-compose logs -f app
-
-# View last 100 lines
-docker-compose logs --tail=100 app
-```
-
-### Export Logs
-
-```bash
-# Export logs to file
-docker logs aim-classifier-api > app.log 2>&1
-
-# Export with timestamps
-docker logs -t aim-classifier-api > app.log 2>&1
-```
-
-## Advanced Topics
-
-### Multi-Container Setup with Monitoring
-
-```yaml
-# docker-compose.monitoring.yml
-version: '3.8'
-
-services:
-  app:
-    # ... existing config ...
-
-  prometheus:
-    image: prom/prometheus:latest
-    ports:
-      - "9090:9090"
-    volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml
-    networks:
-      - app-network
-
-  grafana:
-    image: grafana/grafana:latest
-    ports:
-      - "3000:3000"
-    networks:
-      - app-network
-```
-
-### Kubernetes Deployment
-
-```yaml
-# kubernetes/deployment.yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: aim-classifier-api
-spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: aim-classifier-api
-  template:
-    metadata:
-      labels:
-        app: aim-classifier-api
-    spec:
-      containers:
-      - name: api
-        image: aim-classifier-api:latest
-        ports:
-        - containerPort: 8000
-        env:
-        - name: AIM_OPENAI_KEY
-          valueFrom:
-            secretKeyRef:
-              name: azure-openai-secrets
-              key: api-key
-        resources:
-          requests:
-            memory: "1Gi"
-            cpu: "1"
-          limits:
-            memory: "2Gi"
-            cpu: "2"
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8000
-          initialDelaySeconds: 30
-          periodSeconds: 10
-```
-
-## Support
-
-For issues or questions:
-1. Check container logs: `docker logs aim-classifier-api`
-2. Review this documentation
-3. Check application health: `curl http://localhost:8000/health`
-4. Verify environment variables are set correctly

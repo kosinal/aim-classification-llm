@@ -22,6 +22,7 @@ A production-ready **content recommendation classifier API** built with FastAPI 
 - [Code Quality](#-code-quality)
 - [Architecture](#-architecture)
 - [Configuration](#-configuration)
+- [Docker](#-docker)
 - [Deployment](#-deployment)
 
 ## ⚡ Quick Start
@@ -173,6 +174,14 @@ make test          # Run all tests
 make test-verbose  # Run tests with verbose output
 make lint          # Run all linters and formatters
 make clean         # Remove cache and temporary files
+
+# Docker commands
+make docker-build  # Build Docker image
+make docker-run    # Run application in Docker using docker-compose
+make docker-stop   # Stop Docker containers
+make docker-logs   # View Docker container logs
+make docker-clean  # Remove Docker containers and images
+make docker-shell  # Open shell in running container
 ```
 
 ### Code Quality Tools
@@ -321,6 +330,56 @@ AZURE_API_VERSION=2025-03-01-preview
 - `pyproject.toml`: Dependencies, tool configuration, and project metadata
 - `poetry.lock`: Locked dependency versions for reproducibility
 - `.flake8`: Flake8 linter configuration (legacy, mostly replaced by Ruff)
+
+## 🐳 Docker
+
+### Running with Docker
+
+The application includes Docker support for containerized deployment.
+
+#### Quick Start with Docker
+
+1. **Build the Docker image**
+   ```bash
+   make docker-build
+   # OR: docker build -t aim-classifier-api:latest .
+   ```
+
+2. **Run with docker-compose** (recommended)
+   ```bash
+   make docker-run
+   # OR: docker-compose up -d
+   ```
+
+3. **View logs**
+   ```bash
+   make docker-logs
+   # OR: docker-compose logs -f
+   ```
+
+4. **Stop containers**
+   ```bash
+   make docker-stop
+   # OR: docker-compose down
+   ```
+
+#### Docker Commands Reference
+
+```bash
+make docker-build   # Build Docker image
+make docker-run     # Run application in Docker using docker-compose
+make docker-stop    # Stop Docker containers
+make docker-logs    # View Docker container logs
+make docker-clean   # Remove Docker containers and images
+make docker-shell   # Open shell in running container
+```
+
+#### Docker Environment Setup
+
+When running with Docker, ensure you have:
+- A `.env` file with Azure OpenAI credentials
+
+The application will be available at `http://localhost:8000` after starting the container.
 
 ## 🚢 Deployment
 
