@@ -250,5 +250,6 @@ $RECYCLE.BIN/
 **/requirements.txt
 
 .claude/
+_data/
 
 *.ipynb
