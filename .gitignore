@@ -249,4 +249,6 @@ $RECYCLE.BIN/
 .idea
 **/requirements.txt
 
+.claude/
+
 *.ipynb
