@@ -159,8 +159,9 @@ print(f"Found projects: {unique_projects}")
 # Store compiled models and their stats
 project_models = {}
 project_stats = {}
+project_val_data = {}
 
-set_size = 100
+set_size = 50
 
 for pid in unique_projects:
     str_pid = str(pid)
@@ -194,13 +195,13 @@ for pid in unique_projects:
             random.sample(val_positives, min(len(val_positives), set_size)) +
             random.sample(val_negatives, min(len(val_negatives), set_size))
     )
-
+    project_val_data[str_pid] = optimizer_valset
     # 3. Initialize fresh optimizer and model for this project
     # We re-initialize to ensure no leakage of demos between projects
     optimizer = BootstrapFewShotWithRandomSearch(
         metric=maximize_recall_metric,
-        max_bootstrapped_demos=10,
-        num_candidate_programs=3,
+        max_bootstrapped_demos=8,
+        num_candidate_programs=5,
         num_threads=8,
     )
 
@@ -239,8 +240,7 @@ for pid, model in project_models.items():
     print(f"\nEvaluating Project {pid}...")
 
     # Get the specific dev set for this project
-    p_devset = [ex for ex in devset if ex.project_id == pid]
-    p_devset = random.sample(p_devset, min(len(p_devset), eval_size))
+    p_devset = project_val_data[pid]
     
     y_true = []
     y_scores = []
