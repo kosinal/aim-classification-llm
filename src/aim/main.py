@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
-async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
+async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:  # pragma: no cover
     """
     Lifespan context manager for FastAPI application.
 
@@ -100,7 +100,7 @@ async def health_check() -> dict:
     }
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     import uvicorn
 
     uvicorn.run(
