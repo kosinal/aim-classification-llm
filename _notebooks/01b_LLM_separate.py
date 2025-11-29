@@ -50,7 +50,7 @@ print(df['project_id'].value_counts())
 
 # %%
 # Feature Engineering: Combine Title + Summary if useful, otherwise just Summary
-df['input_text'] = df['title'] + df['summary']
+df['input_text'] = "Author:" + df['author'] + "\nTitle:" + df['title'] + "\nSummary:" + df['summary']
 
 # %%
 dataset = []
@@ -160,7 +160,7 @@ print(f"Found projects: {unique_projects}")
 project_models = {}
 project_stats = {}
 
-set_size = 25
+set_size = 100
 
 for pid in unique_projects:
     str_pid = str(pid)
@@ -199,8 +199,8 @@ for pid in unique_projects:
     # We re-initialize to ensure no leakage of demos between projects
     optimizer = BootstrapFewShotWithRandomSearch(
         metric=maximize_recall_metric,
-        max_bootstrapped_demos=4,
-        num_candidate_programs=6,
+        max_bootstrapped_demos=10,
+        num_candidate_programs=3,
         num_threads=8,
     )
 
@@ -233,13 +233,15 @@ for pid in unique_projects:
 # %%
 # Iterate through models to evaluate them against their specific validation sets
 plt.figure(figsize=(10, 8))
+eval_size = 30
 
 for pid, model in project_models.items():
     print(f"\nEvaluating Project {pid}...")
 
     # Get the specific dev set for this project
     p_devset = [ex for ex in devset if ex.project_id == pid]
-
+    p_devset = random.sample(p_devset, min(len(p_devset), eval_size))
+    
     y_true = []
     y_scores = []
 
@@ -282,3 +284,5 @@ plt.title('ROC Curves by Project')
 plt.legend(loc='lower right')
 plt.grid(True)
 plt.show()
+
+# %%
