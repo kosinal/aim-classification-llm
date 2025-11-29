@@ -58,7 +58,11 @@ class TestAssessContentEndpoint:
         # Make request
         response = client.post(
             "/api/project/1/assess",
-            json={"summary": "Important project update about budget allocation"},
+            json={
+                "summary": "Important project update about budget allocation",
+                "author": "John Smith",
+                "title": "Budget Allocation Update",
+            },
         )
 
         assert response.status_code == 200
@@ -82,7 +86,12 @@ class TestAssessContentEndpoint:
 
         # Make request
         response = client.post(
-            "/api/project/2/assess", json={"summary": "Irrelevant spam content"}
+            "/api/project/2/assess",
+            json={
+                "summary": "Irrelevant spam content",
+                "author": "Spam Bot",
+                "title": "Spam Article",
+            },
         )
 
         assert response.status_code == 200
@@ -104,7 +113,10 @@ class TestAssessContentEndpoint:
         mock_prediction.prediction = "positive"
         models["1"].return_value = mock_prediction
 
-        response = client.post("/api/project/1/assess", json={"summary": "Test content"})
+        response = client.post(
+            "/api/project/1/assess",
+            json={"summary": "Test content", "author": "Test Author", "title": "Test Title"},
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -122,7 +134,10 @@ class TestAssessContentEndpoint:
         mock_prediction.prediction = "positive"
         models["1"].return_value = mock_prediction
 
-        response = client.post("/api/project/1/assess", json={"summary": "Test content"})
+        response = client.post(
+            "/api/project/1/assess",
+            json={"summary": "Test content", "author": "Test Author", "title": "Test Title"},
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -140,7 +155,10 @@ class TestAssessContentEndpoint:
         mock_prediction.prediction = "negative"
         models["1"].return_value = mock_prediction
 
-        response = client.post("/api/project/1/assess", json={"summary": "Test content"})
+        response = client.post(
+            "/api/project/1/assess",
+            json={"summary": "Test content", "author": "Test Author", "title": "Test Title"},
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -150,7 +168,10 @@ class TestAssessContentEndpoint:
         """Test error response when models are not loaded."""
         client = TestClient(app_without_models)
 
-        response = client.post("/api/project/1/assess", json={"summary": "Test content"})
+        response = client.post(
+            "/api/project/1/assess",
+            json={"summary": "Test content", "author": "Test Author", "title": "Test Title"},
+        )
 
         assert response.status_code == 503
         assert response.json()["detail"] == "Models not loaded yet"
@@ -161,7 +182,8 @@ class TestAssessContentEndpoint:
         client = TestClient(app)
 
         response = client.post(
-            "/api/project/999/assess", json={"summary": "Test content"}
+            "/api/project/999/assess",
+            json={"summary": "Test content", "author": "Test Author", "title": "Test Title"},
         )
 
         assert response.status_code == 404
@@ -176,7 +198,10 @@ class TestAssessContentEndpoint:
         # Mock model to raise exception
         models["1"].side_effect = Exception("Model processing error")
 
-        response = client.post("/api/project/1/assess", json={"summary": "Test content"})
+        response = client.post(
+            "/api/project/1/assess",
+            json={"summary": "Test content", "author": "Test Author", "title": "Test Title"},
+        )
 
         assert response.status_code == 500
         assert "Model processing error" in response.json()["detail"]
@@ -187,12 +212,48 @@ class TestAssessContentEndpoint:
         client = TestClient(app)
 
         # Empty summary should fail validation
-        response = client.post("/api/project/1/assess", json={"summary": ""})
+        response = client.post(
+            "/api/project/1/assess",
+            json={"summary": "", "author": "Test Author", "title": "Test Title"},
+        )
 
         assert response.status_code == 422  # Validation error
 
     def test_assess_content_missing_summary_field(self, app_with_models):
         """Test error when summary field is missing."""
+        app, _ = app_with_models
+        client = TestClient(app)
+
+        response = client.post(
+            "/api/project/1/assess", json={"author": "Test Author", "title": "Test Title"}
+        )
+
+        assert response.status_code == 422  # Validation error
+
+    def test_assess_content_missing_author_field(self, app_with_models):
+        """Test error when author field is missing."""
+        app, _ = app_with_models
+        client = TestClient(app)
+
+        response = client.post(
+            "/api/project/1/assess", json={"summary": "Test summary", "title": "Test Title"}
+        )
+
+        assert response.status_code == 422  # Validation error
+
+    def test_assess_content_missing_title_field(self, app_with_models):
+        """Test error when title field is missing."""
+        app, _ = app_with_models
+        client = TestClient(app)
+
+        response = client.post(
+            "/api/project/1/assess", json={"summary": "Test summary", "author": "Test Author"}
+        )
+
+        assert response.status_code == 422  # Validation error
+
+    def test_assess_content_missing_all_fields(self, app_with_models):
+        """Test error when all required fields are missing."""
         app, _ = app_with_models
         client = TestClient(app)
 
@@ -219,13 +280,19 @@ class TestAssessContentEndpoint:
         models["2"].return_value = mock_pred_2
 
         # Test project 1
-        response1 = client.post("/api/project/1/assess", json={"summary": "Test 1"})
+        response1 = client.post(
+            "/api/project/1/assess",
+            json={"summary": "Test 1", "author": "Author 1", "title": "Title 1"},
+        )
         assert response1.status_code == 200
         assert response1.json()["project_id"] == "1"
         assert response1.json()["reasoning"] == "Project 1 analysis"
 
         # Test project 2
-        response2 = client.post("/api/project/2/assess", json={"summary": "Test 2"})
+        response2 = client.post(
+            "/api/project/2/assess",
+            json={"summary": "Test 2", "author": "Author 2", "title": "Title 2"},
+        )
         assert response2.status_code == 200
         assert response2.json()["project_id"] == "2"
         assert response2.json()["reasoning"] == "Project 2 analysis"
@@ -246,10 +313,45 @@ class TestAssessContentEndpoint:
         mock_prediction.prediction = "POSITIVE"
         models["1"].return_value = mock_prediction
 
-        response = client.post("/api/project/1/assess", json={"summary": "Test"})
+        response = client.post(
+            "/api/project/1/assess",
+            json={"summary": "Test", "author": "Test Author", "title": "Test Title"},
+        )
         assert response.json()["recommend"] is True
 
         # Test with mixed case Negative
         mock_prediction.prediction = "Negative"
-        response = client.post("/api/project/1/assess", json={"summary": "Test"})
+        response = client.post(
+            "/api/project/1/assess",
+            json={"summary": "Test", "author": "Test Author", "title": "Test Title"},
+        )
         assert response.json()["recommend"] is False
+
+    def test_assess_content_formats_input_correctly(self, app_with_models):
+        """Test that author, title, and summary are formatted correctly for the model."""
+        app, models = app_with_models
+        client = TestClient(app)
+
+        mock_prediction = MagicMock()
+        mock_prediction.reasoning = "Test"
+        mock_prediction.prediction_score = "0.8"
+        mock_prediction.prediction = "positive"
+        models["1"].return_value = mock_prediction
+
+        client.post(
+            "/api/project/1/assess",
+            json={
+                "summary": "Test summary content",
+                "author": "Jane Doe",
+                "title": "Test Article Title",
+            },
+        )
+
+        # Verify the model was called with correctly formatted string
+        models["1"].assert_called_once()
+        call_args = models["1"].call_args
+        assert call_args.kwargs["project_id"] == "1"
+        assert (
+            call_args.kwargs["summary"]
+            == "Author:Jane Doe\nTitle:Test Article Title\nSummary:Test summary content"
+        )

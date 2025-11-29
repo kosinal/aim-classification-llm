@@ -12,6 +12,18 @@ class AssessRequest(BaseModel):
         description="The summary of the content to evaluate",
         min_length=1,
     )
+    author: str = Field(
+        ...,
+        example="J.R.R. Tolkien",
+        description="Name of the author of the article",
+        min_length=1,
+    )
+    title: str = Field(
+        ...,
+        example="Budget concerns regarding the new marketing initiative.",
+        description="Original title of the article",
+        min_length=1,
+    )
 
 
 class AssessResponse(BaseModel):

@@ -12,14 +12,18 @@ class TestAssessRequest:
 
     def test_assess_request_valid_data(self):
         """Test AssessRequest with valid data."""
-        request = AssessRequest(summary="This is a valid summary")
+        request = AssessRequest(
+            summary="This is a valid summary", author="John Doe", title="Test Title"
+        )
 
         assert request.summary == "This is a valid summary"
+        assert request.author == "John Doe"
+        assert request.title == "Test Title"
 
     def test_assess_request_with_long_summary(self):
         """Test AssessRequest accepts long summaries."""
         long_summary = "a" * 10000
-        request = AssessRequest(summary=long_summary)
+        request = AssessRequest(summary=long_summary, author="Author Name", title="Title")
 
         assert request.summary == long_summary
         assert len(request.summary) == 10000
@@ -27,7 +31,7 @@ class TestAssessRequest:
     def test_assess_request_empty_string_fails(self):
         """Test that empty string fails validation due to min_length."""
         with pytest.raises(ValidationError) as exc_info:
-            AssessRequest(summary="")
+            AssessRequest(summary="", author="Author", title="Title")
 
         errors = exc_info.value.errors()
         assert len(errors) == 1
@@ -37,43 +41,76 @@ class TestAssessRequest:
     def test_assess_request_missing_summary_fails(self):
         """Test that missing summary field fails validation."""
         with pytest.raises(ValidationError) as exc_info:
-            AssessRequest()
+            AssessRequest(author="Author", title="Title")
 
         errors = exc_info.value.errors()
         assert any(error["loc"] == ("summary",) for error in errors)
 
+    def test_assess_request_missing_author_fails(self):
+        """Test that missing author field fails validation."""
+        with pytest.raises(ValidationError) as exc_info:
+            AssessRequest(summary="Summary", title="Title")
+
+        errors = exc_info.value.errors()
+        assert any(error["loc"] == ("author",) for error in errors)
+
+    def test_assess_request_missing_title_fails(self):
+        """Test that missing title field fails validation."""
+        with pytest.raises(ValidationError) as exc_info:
+            AssessRequest(summary="Summary", author="Author")
+
+        errors = exc_info.value.errors()
+        assert any(error["loc"] == ("title",) for error in errors)
+
+    def test_assess_request_missing_all_fields_fails(self):
+        """Test that missing all required fields fails validation."""
+        with pytest.raises(ValidationError) as exc_info:
+            AssessRequest()
+
+        errors = exc_info.value.errors()
+        field_names = [error["loc"][0] for error in errors]
+        assert "summary" in field_names
+        assert "author" in field_names
+        assert "title" in field_names
+
     def test_assess_request_none_summary_fails(self):
         """Test that None summary fails validation."""
         with pytest.raises(ValidationError):
-            AssessRequest(summary=None)
+            AssessRequest(summary=None, author="Author", title="Title")
 
     def test_assess_request_non_string_summary_fails(self):
         """Test that non-string summary fails validation."""
         with pytest.raises(ValidationError):
-            AssessRequest(summary=123)
+            AssessRequest(summary=123, author="Author", title="Title")
 
     def test_assess_request_dict_to_model(self):
         """Test creating AssessRequest from dictionary."""
-        data = {"summary": "Test summary from dict"}
+        data = {"summary": "Test summary from dict", "author": "Dict Author", "title": "Dict Title"}
         request = AssessRequest(**data)
 
         assert request.summary == "Test summary from dict"
+        assert request.author == "Dict Author"
+        assert request.title == "Dict Title"
 
     def test_assess_request_model_dump(self):
         """Test dumping AssessRequest to dictionary."""
-        request = AssessRequest(summary="Test summary")
+        request = AssessRequest(summary="Test summary", author="Test Author", title="Test Title")
         data = request.model_dump()
 
         assert isinstance(data, dict)
         assert data["summary"] == "Test summary"
+        assert data["author"] == "Test Author"
+        assert data["title"] == "Test Title"
 
     def test_assess_request_model_dump_json(self):
         """Test dumping AssessRequest to JSON."""
-        request = AssessRequest(summary="Test summary")
+        request = AssessRequest(summary="Test summary", author="Test Author", title="Test Title")
         json_str = request.model_dump_json()
 
         assert isinstance(json_str, str)
         assert "Test summary" in json_str
+        assert "Test Author" in json_str
+        assert "Test Title" in json_str
 
 
 class TestAssessResponse:

@@ -46,7 +46,10 @@ async def assess_content(
     model_instance = models_map[project_id_str]
 
     try:
-        pred = model_instance(project_id=project_id_str, summary=request_data.summary)
+        pred = model_instance(
+            project_id=project_id_str,
+            summary=f"Author:{request_data.author}\nTitle:{request_data.title}\nSummary:{request_data.summary}"
+        )
 
         # Robust parsing (LLMs sometimes return strings for numbers)
         try:
