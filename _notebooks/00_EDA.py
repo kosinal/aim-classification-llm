@@ -17,9 +17,11 @@ import os
 import json
 import pandas as pd
 from pathlib import Path
+from openai import AzureOpenAI
+from tqdm import tqdm
 
 # %%
-# !poetry add pandas --group dev
+# #!poetry add pandas --group dev
 
 # %%
 
@@ -27,11 +29,82 @@ from pathlib import Path
 data_folder = Path("../_data/")
 
 # %%
+input_data = json.loads((data_folder / "InsightRelevancyDataset.json").read_text())
 
 # %%
-input_data = json.loads((data_folder / "InsightRelevancyDataset.json").read())
 
 # %%
-pd.read_json()
+print(f"Pos/Neg ratio: {len(input_data['positives'])}/{len(input_data['negatives'])}")
+
+# %%
+os.environ["AIM_OPENAI_KEY"] = "9bd2d13588a14f4cae62325fc68d7d64"
+
+# %%
+model_name = "gpt-5-hiring"
+mini_model_name = "gpt-5-mini-hiring"
+llm_client = client = AzureOpenAI(
+    api_version="2025-03-01-preview",
+    azure_endpoint="https://aim-australia-east.openai.azure.com/",
+    api_key=os.environ["AIM_OPENAI_KEY"]
+)
+
+# %%
+
+# %%
+pos_data = pd.DataFrame(input_data['positives'])
+pos_data["label"] = "positive"
+
+# %%
+neg_data = pd.DataFrame(input_data['negatives'])
+neg_data["label"] = "negatives"
+
+# %%
+all_data = pd.concat([pos_data, neg_data])
+
+# %%
+all_data
+
+
+# %%
+def translate_to_english(text):
+    """Translate text to English using Azure OpenAI. Returns original if already in English."""
+    if pd.isna(text) or text == "null" or not text:
+        return text
+    
+    try:
+        response = llm_client.chat.completions.create(
+            model=mini_model_name,
+            messages=[
+                {"role": "system", "content": "You are a translator. If the text is already in English, return it unchanged. Otherwise, translate it to English. Return ONLY the translated text without any explanations."},
+                {"role": "user", "content": f"Translate this text to English:\n\n{text}"}
+            ],
+            max_completion_tokens=5000
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        print(f"Error translating: {e}")
+        return text
+
+
+# %%
+translate_to_english("Ahoj, jak se vede")
+
+# %%
+# Translate title and summary columns to English with progress tracking
+
+translation_fields = ["title", "summary", "text"]
+
+for translation_field in translation_fields:
+    titles_translated = []
+    for title in tqdm(all_data[translation_field], desc=f"Translating {translation_field}"):
+        titles_translated.append(translate_to_english(title))
+    all_data[f'{translation_field}_en'] = titles_translated
+
+print("\nTranslation complete!")
+all_data.head()
+
+# %%
+print("Translating texts...")
+all_data['text_en'] = all_data['text'].apply(translate_to_english)
 
 # %%
