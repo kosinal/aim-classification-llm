@@ -181,4 +181,8 @@ all_data.drop(["flag_note", "flags", "flag_insightful", "id", "isFlagged"], axis
 all_data.info()
 
 # %%
+#Fill missing author with Unknwon autor.
+all_data['author'] = all_data['author'].fillna("Unknown Author")
+
+# %%
 all_data.to_parquet(data_folder / "data.parquet")
