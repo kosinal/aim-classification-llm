@@ -44,14 +44,15 @@ df = pd.read_parquet(data_folder / "data.parquet")
 
 print(f"Total samples: {len(df)}")
 print(f"\nClass distribution:")
-print(df['label'].value_counts())
+print(df['isFlagged'].value_counts())
 print(f"\nProject distribution:")
 print(df['project_id'].value_counts())
 
 
 # %%
 # Feature Engineering: Combine Title + Summary if useful, otherwise just Summary
-df['input_text'] = df['title'] + df['summary']
+# Lets start with summary
+df['input_text'] = df['summary']
 
 # %%
 dataset = []
@@ -59,14 +60,14 @@ for _, row in df.iterrows():
     dataset.append(dspy.Example(
         project_id=str(row['project_id']),
         summary=row['input_text'],
-        label=row['label'] # Convert bool to string for LLM
+        is_flagged=str(row['isFlagged']) # Convert bool to string for LLM
     ).with_inputs('project_id', 'summary'))
 
 # %%
 splitter = StratifiedShuffleSplit(n_splits=1, test_size=0.2, random_state=42)
 
 # %%
-strat_key = df['project_id'].astype(str) + "_" + df['label'].astype(str)
+strat_key = df['project_id'].astype(str) + "_" + df['isFlagged'].astype(str)
 
 # %%
 train_idx, dev_idx = next(splitter.split(df, strat_key))
@@ -80,16 +81,16 @@ print(f"Train size: {len(trainset)}, Dev size: {len(devset)}")
 # %%
 class FlagAssessor(dspy.Signature):
     """
-    Analyze the text and determine if it should be recommended to user based on the project context.
-    Output a recomendation score between 0.0 and 1.0, where 1.0 is highly recommendable.
+    Analyze the summary and determine if it should be flagged based on the project context.
+    Output a risk score between 0.0 and 1.0, where 1.0 is highly flaggable.
     """
     project_id = dspy.InputField(desc="The ID of the project this content belongs to. Relevance context depends on this.")
     summary = dspy.InputField(desc="The summary of the content to evaluate.")
     
     # We ask for a score to allow threshold tuning for your specific FPR requirements
     reasoning = dspy.OutputField(desc="Step-by-step analysis of why this is relevant or not.")
-    prediction_score = dspy.OutputField(desc="A float score between 0.0 and 1.0 indicating probability of being recommended.")
-    prediction = dspy.OutputField(desc="Binary decision: 'positive' or 'negative'.")
+    risk_score = dspy.OutputField(desc="A float score between 0.0 and 1.0 indicating probability of being flagged.")
+    prediction = dspy.OutputField(desc="Binary decision: 'True' or 'False'.")
 
 
 # %%
@@ -106,8 +107,8 @@ class FlagClassifier(dspy.Module):
 # %%
 # def maximize_recall_metric(gold, pred, trace=None):
 #     # 1. Parse strings to booleans safely
-#     pred_flag = pred.prediction.strip().lower() == 'positive'
-#     gold_flag = gold.label.strip().lower() == 'positive'
+#     pred_flag = str(pred.prediction).strip().lower() == 'true'
+#     gold_flag = str(gold.is_flagged).strip().lower() == 'true'
 
 #     # 2. Logic to force high TPR
 #     if gold_flag:
@@ -123,41 +124,28 @@ class FlagClassifier(dspy.Module):
 #             return 1.0  # Correctly ignored (TN)
 #         else:
 #             # We give a HIGH score for False Positives (e.g., 0.8 or 0.9).
+#             # This tells the model: "It's okay to over-flag, just don't miss any."
 #             return 0.8
 
 # Currently, I balanced the dataset.
 def maximize_recall_metric(gold, pred, trace=None):
-    # 1. Parse text decisions
-    pred_flag = str(pred.prediction).strip().lower() == 'positive'
-    gold_flag = str(gold.label).strip().lower() == 'positive' # Added str() for safety
-    # print(str(pred.prediction), str(gold.label))
-    # print(pred_flag, gold_flag)
-    try:
-        score = float(pred.prediction_score)
-    except:
-        # print("Invalid score {pred.prediction_score}")
-        return 0.0 # Punishment for invalid score format
-
-    # If text says positive, score must be high (>0.5). If text says negative, score must be low.
-    score_aligned = (pred_flag and score > 0.5) or (not pred_flag and score <= 0.5)
+    # Parse the prediction string 'True'/'False' to boolean
+    pred_flag = pred.prediction.strip().lower() == 'true'
+    gold_flag = gold.is_flagged.strip().lower() == 'true'
     
-    if not score_aligned:
-        # print("Penalization for score mismatch")
-        return 0.0 # Penalize hallucinated scores that don't match the decision
-
-    # 4. Standard Recall Logic
+    # If Gold is True, we MUST predict True (Recall focus)
     if gold_flag and pred_flag:
         return 1.0
     elif gold_flag and not pred_flag:
-        return 0.0 
+        return 0.0 # Heavy penalty for missing a flag
     elif not gold_flag and pred_flag:
-        return 0.5 
-    return 1.0
+        return 0.5 # Smaller penalty for False Positive (we can filter these later with score)
+    return 1.0 # True Negative
 
 
 # %%
 lm = dspy.LM(
-    model=f"azure/{MINI_MODEL_NAME}",
+    model=f"azure/{MODEL_NAME}",
     api_base=ENDPOINT,
     api_version=API_VERSION,
     api_key=os.environ["AIM_OPENAI_KEY"],
@@ -176,21 +164,16 @@ optimizer = BootstrapFewShotWithRandomSearch(
 )
 
 # %%
-positives = [ex for ex in trainset if ex.label == 'positive']
-negatives = [ex for ex in trainset if ex.label == 'negative']
-
-val_positives = [ex for ex in devset if ex.label == 'positive']
-val_negatives = [ex for ex in devset if ex.label == 'negative']
-
-print(f"Train sizes: {len(positives)}/{len(negatives)}")
-print(f"Val sizes: {len(val_positives)}/{len(val_negatives)}")
+positives = [ex for ex in trainset if ex.is_flagged == 'True']
+negatives = [ex for ex in trainset if ex.is_flagged == 'False']
 
 # %%
-set_size = 25
+val_set_size = 50
+train_set_size = val_set_size // 2
 
 # %%
-optimizer_trainset = random.sample(positives, min(len(positives), set_size)) + random.sample(negatives, min(len(negatives), set_size))
-optimizer_valset = random.sample(val_positives, min(len(val_positives), set_size)) + random.sample(val_negatives, min(len(val_negatives), set_size))
+optimizer_trainset = random.sample(positives, train_set_size) + random.sample(negatives, train_set_size)
+optimizer_valset = random.sample(devset, val_set_size)
 
 # %%
 uncompiled_model = FlagClassifier()
@@ -208,6 +191,57 @@ compiled_model.save(data_folder / f'flag_classifier_optimized_{datetime.now().is
 
 print("Model saved successfully.")
 
+
+# %%
+def evaluate_tpr_at_fpr(model, dev_set, thresholds=[0.1, 0.01, 0.001]):
+    print("Running evaluation on Dev set...")
+    y_true = []
+    y_scores = []
+    
+    for example in dev_set:
+        try:
+            pred = model(project_id=example.project_id, summary=example.summary)
+            
+            # Extract score safely
+            try:
+                score = float(pred.risk_score)
+            except ValueError:
+                # Fallback if LLM outputs text instead of number
+                score = 1.0 if pred.prediction.lower() == 'true' else 0.0
+                
+            y_scores.append(score)
+            y_true.append(1 if example.is_flagged.lower() == 'true' else 0)
+        except Exception as e:
+            print(f"Error on example: {e}")
+            continue
+
+    # Calculate ROC curve
+    fpr, tpr, roc_thresholds = roc_curve(y_true, y_scores)
+    
+    results = {}
+    for target_fpr in thresholds:
+        # Find the index where FPR is closest to target_fpr (without exceeding it if strict)
+        # Usually we use interpolation, but finding the nearest index is standard for quick checks
+        idx = np.argmin(np.abs(fpr - target_fpr))
+        actual_fpr = fpr[idx]
+        actual_tpr = tpr[idx]
+        cutoff = roc_thresholds[idx]
+        
+        results[f"FPR_{target_fpr}"] = {"TPR": actual_tpr, "Actual_FPR": actual_fpr, "Score_Cutoff": cutoff}
+        
+    return results
+
+
+# %%
+# results = evaluate_tpr_at_fpr(compiled_model, optimizer_valset)
+
+# print("\n--- Final Performance Report ---")
+# for fpr_target, metrics in results.items():
+#     print(f"Target FPR: {fpr_target}")
+#     print(f"  -> Achieved TPR (Recall): {metrics['TPR']:.4f}")
+#     print(f"  -> At Score Threshold: {metrics['Score_Cutoff']:.4f}")
+#     print("---")
+
 # %%
 model = compiled_model
 
@@ -215,41 +249,24 @@ model = compiled_model
 y_true = []
 y_scores = []
 
-thresholds = [0.1, 0.01, 0.001]
-
 for example in optimizer_valset:
     try:
         pred = model(project_id=example.project_id, summary=example.summary)        
-        
-        # FIX 1: Use prediction_score (matches Signature)
+        # Extract score safely
         try:
-            score = float(pred.prediction_score)
-        except (ValueError, TypeError):
-            # Fallback based on text prediction
-            score = 1.0 if pred.prediction.strip().lower() in ['positive', 'true'] else 0.0
+            score = float(pred.risk_score)
+        except ValueError:
+            # Fallback if LLM outputs text instead of number
+            score = 1.0 if pred.prediction.lower() == 'true' else 0.0
             
         y_scores.append(score)
-        
-        # FIX 2: Handle label (matches Dataset)
-        is_pos = str(example.label).strip().lower() in ['true', 'positive']
-        y_true.append(1 if is_pos else 0)
-        
+        y_true.append(1 if example.is_flagged.lower() == 'true' else 0)
     except Exception as e:
         print(f"Error on example: {e}")
         continue
 
 # %%
 fpr, tpr, roc_thresholds = roc_curve(y_true, y_scores)
-
-# %%
-results = {}
-for target_fpr in thresholds:
-    idx = np.argmin(np.abs(fpr - target_fpr))
-    actual_fpr = fpr[idx]
-    actual_tpr = tpr[idx]
-    cutoff = roc_thresholds[idx]
-    
-    results[f"FPR_{target_fpr}"] = {"TPR": actual_tpr, "Actual_FPR": actual_fpr, "Score_Cutoff": cutoff}
 
 # %%
 roc_auc = roc_auc_score(y_true, y_scores)
@@ -272,3 +289,24 @@ plt.title('Receiver Operating Characteristic (ROC) Curve')
 plt.legend(loc='lower right')
 plt.grid(True)
 plt.show()
+
+# %%
+results = {}
+for target_fpr in thresholds:
+    idx = np.argmin(np.abs(fpr - target_fpr))
+    actual_fpr = fpr[idx]
+    actual_tpr = tpr[idx]
+    cutoff = roc_thresholds[idx]
+    
+    results[f"FPR_{target_fpr}"] = {"TPR": actual_tpr, "Actual_FPR": actual_fpr, "Score_Cutoff": cutoff}
+
+# %%
+actual_fpr
+
+# %%
+actual_tpr
+
+# %%
+cutoff
+
+# %%

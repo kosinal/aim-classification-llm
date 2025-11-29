@@ -50,7 +50,7 @@ print(df['project_id'].value_counts())
 
 # %%
 # Feature Engineering: Combine Title + Summary if useful, otherwise just Summary
-df['input_text'] = "Author:" + df['author'] + "\nTitle:" + df['title'] + "\nSummary:" + df['summary']
+df['input_text'] = df['title'] + df['summary']
 
 # %%
 dataset = []
@@ -155,13 +155,11 @@ logging.getLogger("dspy.utils.parallelizer").setLevel(logging.ERROR)
 unique_projects = df['project_id'].unique()
 print(f"Found projects: {unique_projects}")
 
-# %%
 # Store compiled models and their stats
 project_models = {}
 project_stats = {}
-project_val_data = {}
 
-set_size = 50
+set_size = 25
 
 for pid in unique_projects:
     str_pid = str(pid)
@@ -195,13 +193,13 @@ for pid in unique_projects:
             random.sample(val_positives, min(len(val_positives), set_size)) +
             random.sample(val_negatives, min(len(val_negatives), set_size))
     )
-    project_val_data[str_pid] = optimizer_valset
+
     # 3. Initialize fresh optimizer and model for this project
     # We re-initialize to ensure no leakage of demos between projects
     optimizer = BootstrapFewShotWithRandomSearch(
         metric=maximize_recall_metric,
-        max_bootstrapped_demos=8,
-        num_candidate_programs=5,
+        max_bootstrapped_demos=4,
+        num_candidate_programs=6,
         num_threads=8,
     )
 
@@ -234,14 +232,13 @@ for pid in unique_projects:
 # %%
 # Iterate through models to evaluate them against their specific validation sets
 plt.figure(figsize=(10, 8))
-eval_size = 30
 
 for pid, model in project_models.items():
     print(f"\nEvaluating Project {pid}...")
 
     # Get the specific dev set for this project
-    p_devset = project_val_data[pid]
-    
+    p_devset = [ex for ex in devset if ex.project_id == pid]
+
     y_true = []
     y_scores = []
 
@@ -284,5 +281,3 @@ plt.title('ROC Curves by Project')
 plt.legend(loc='lower right')
 plt.grid(True)
 plt.show()
-
-# %%
