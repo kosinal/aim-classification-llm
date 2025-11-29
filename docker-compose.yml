@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aim-classifier-api
+    ports:
+      - "8000:8000"
+    environment:
+      # Azure OpenAI Configuration
+      - AIM_OPENAI_KEY=${AIM_OPENAI_KEY}
+      - AZURE_ENDPOINT=${AZURE_ENDPOINT:-https://aim-australia-east.openai.azure.com/}
+      - AZURE_MODEL_NAME=${AZURE_MODEL_NAME:-gpt-5-mini-hiring}
+      - AZURE_API_VERSION=${AZURE_API_VERSION:-2025-03-01-preview}
+      # Python environment
+      - PYTHONUNBUFFERED=1
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge

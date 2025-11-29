@@ -1,0 +1,87 @@
+# Git and version control
+.git
+.gitignore
+.gitattributes
+
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+.virtualenv/
+
+# Poetry cache
+.poetry/
+poetry.lock.bak
+
+# Testing and coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.hypothesis/
+coverage.xml
+*.cover
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Notebooks and data (excluded from Docker image)
+_notebooks/
+*.ipynb
+*.py:percent
+_data/
+
+# Documentation
+*.md
+docs/
+claudedocs/
+
+# Environment files (use docker-compose for env vars)
+.env
+.env.*
+!.env.example
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+.eggs/
+
+# Logs
+*.log
+logs/
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Docker files (don't need these in the image)
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+
+# Development tools
+Makefile
+.pre-commit-config.yaml
+
+# Test files (not needed in production image)
+tests/
+pytest.ini
