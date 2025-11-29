@@ -31,7 +31,6 @@ import logging
 # %%
 # Configuration
 data_folder = Path("../_data/")
-os.environ["AIM_OPENAI_KEY"] = "9bd2d13588a14f4cae62325fc68d7d64"
 
 # Model configuration
 MODEL_NAME = "gpt-5-hiring"
@@ -184,7 +183,7 @@ project_models = {}
 project_stats = {}
 project_val_data = {}
 
-set_size = 100
+set_size = 500
 
 for pid in unique_projects:
     str_pid = str(pid)
@@ -223,8 +222,8 @@ for pid in unique_projects:
     # We re-initialize to ensure no leakage of demos between projects
     optimizer = BootstrapFewShotWithRandomSearch(
         metric=maximize_recall_metric,
-        max_bootstrapped_demos=6,
-        num_candidate_programs=10,
+        max_bootstrapped_demos=10,
+        num_candidate_programs=2,
         num_threads=8,
     )
 

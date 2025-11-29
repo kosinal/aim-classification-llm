@@ -31,7 +31,6 @@ import logging
 # %%
 # Configuration
 data_folder = Path("../_data/")
-os.environ["AIM_OPENAI_KEY"] = "9bd2d13588a14f4cae62325fc68d7d64"
 
 # Model configuration
 MODEL_NAME = "gpt-5-hiring"

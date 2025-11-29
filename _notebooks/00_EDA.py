@@ -40,7 +40,6 @@ input_data = json.loads((data_folder / "InsightRelevancyDataset.json").read_text
 print(f"Pos/Neg ratio: {len(input_data['positives'])}/{len(input_data['negatives'])}")
 
 # %%
-os.environ["AIM_OPENAI_KEY"] = "9bd2d13588a14f4cae62325fc68d7d64"
 
 # %%
 model_name = "gpt-5-hiring"
