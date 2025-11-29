@@ -64,47 +64,43 @@ all_data = pd.concat([pos_data, neg_data])
 # %%
 all_data
 
+# %%
+# Too slow for now, would take too long for make it faster for 1MD assignment
+# 
+# def translate_to_english(text):
+#     """Translate text to English using Azure OpenAI. Returns original if already in English."""
+#     if pd.isna(text) or text == "null" or not text:
+#         return text
+#     
+#     try:
+#         response = llm_client.chat.completions.create(
+#             model=mini_model_name,
+#             messages=[
+#                 {"role": "system", "content": "You are a translator. If the text is already in English, return it unchanged. Otherwise, translate it to English. Return ONLY the translated text without any explanations."},
+#                 {"role": "user", "content": f"Translate this text to English:\n\n{text}"}
+#             ],
+#             max_completion_tokens=5000
+#         )
+#         return response.choices[0].message.content.strip()
+#     except Exception as e:
+#         print(f"Error translating: {e}")
+#         return text
 
 # %%
-def translate_to_english(text):
-    """Translate text to English using Azure OpenAI. Returns original if already in English."""
-    if pd.isna(text) or text == "null" or not text:
-        return text
-    
-    try:
-        response = llm_client.chat.completions.create(
-            model=mini_model_name,
-            messages=[
-                {"role": "system", "content": "You are a translator. If the text is already in English, return it unchanged. Otherwise, translate it to English. Return ONLY the translated text without any explanations."},
-                {"role": "user", "content": f"Translate this text to English:\n\n{text}"}
-            ],
-            max_completion_tokens=5000
-        )
-        return response.choices[0].message.content.strip()
-    except Exception as e:
-        print(f"Error translating: {e}")
-        return text
-
-
-# %%
-translate_to_english("Ahoj, jak se vede")
+# translate_to_english("Ahoj, jak se vede")
 
 # %%
 # Translate title and summary columns to English with progress tracking
-
-translation_fields = ["title", "summary", "text"]
-
-for translation_field in translation_fields:
-    titles_translated = []
-    for title in tqdm(all_data[translation_field], desc=f"Translating {translation_field}"):
-        titles_translated.append(translate_to_english(title))
-    all_data[f'{translation_field}_en'] = titles_translated
-
-print("\nTranslation complete!")
-all_data.head()
-
-# %%
-print("Translating texts...")
-all_data['text_en'] = all_data['text'].apply(translate_to_english)
+# 
+# translation_fields = ["title", "summary", "text"]
+# 
+# for translation_field in translation_fields:
+#     titles_translated = []
+#     for title in tqdm(all_data[translation_field], desc=f"Translating {translation_field}"):
+#         titles_translated.append(translate_to_english(title))
+#     all_data[f'{translation_field}_en'] = titles_translated
+# 
+# print("\nTranslation complete!")
+# all_data.head()
 
 # %%
