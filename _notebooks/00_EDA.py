@@ -104,3 +104,43 @@ all_data
 # all_data.head()
 
 # %%
+
+# %% [markdown]
+# # Flags Column Exploration
+
+# %%
+# Extract all unique keys from flags dictionaries
+all_flag_keys = set()
+for flags_dict in all_data['flags'].dropna():
+    if isinstance(flags_dict, dict):
+        all_flag_keys.update(flags_dict.keys())
+
+print(f"Unique flag keys found: {sorted(all_flag_keys)}")
+print(f"Total number of unique flags: {len(all_flag_keys)}")
+
+# %%
+notes_vals = []
+insightful_vals = []
+for flags_dict in all_data['flags']:
+    if flags_dict is None or len(flags_dict) == 0:
+        notes_vals.append("")
+        insightful_vals.append("")
+        continue
+    notes_vals.append(flags_dict.get("note", ""))
+    insightful_vals.append("\n".join(flags_dict.get("insightful", [""])))
+
+all_data['flag_note'] = notes_vals
+all_data['flag_insightful'] = insightful_vals
+
+# %%
+all_data[(all_data.flag_insightful != "") & (all_data.label == "negatives")]
+
+# %%
+all_data[(all_data.flag_insightful != "") & (all_data.label != "negatives")]
+
+# %%
+# Ok, flags are only for negatives, so it wont help us much
+
+# %%
+
+# %%
