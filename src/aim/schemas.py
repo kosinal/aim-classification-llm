@@ -8,21 +8,21 @@ class AssessRequest(BaseModel):
 
     summary: str = Field(
         ...,
-        example="Budget concerns regarding the new marketing initiative.",
         description="The summary of the content to evaluate",
         min_length=1,
+        json_schema_extra={"example": "Budget concerns regarding the new marketing initiative."},
     )
     author: str = Field(
         ...,
-        example="J.R.R. Tolkien",
         description="Name of the author of the article",
         min_length=1,
+        json_schema_extra={"example": "J.R.R. Tolkien"},
     )
     title: str = Field(
         ...,
-        example="Budget concerns regarding the new marketing initiative.",
         description="Original title of the article",
         min_length=1,
+        json_schema_extra={"example": "Budget concerns regarding the new marketing initiative."},
     )
 
 
