@@ -10,6 +10,7 @@ from typing import AsyncGenerator
 
 from fastapi import FastAPI
 
+from aim import config
 from aim.predictor import EmbeddingClassifier
 from aim.routes import router
 
@@ -27,7 +28,7 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:  # pragm
     logger.info("Loading XGBoost embedding classifier...")
 
     # Get paths to model artifacts
-    data_dir = Path(os.environ["MODEL_BASE_PATH"])
+    data_dir = Path(config.settings.model_base_path)
 
     model_path = data_dir / "xgboost_model.json"
     encoder_path = data_dir / "project_encoder.pkl"

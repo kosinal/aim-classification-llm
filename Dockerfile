@@ -36,7 +36,7 @@ RUN groupadd -r appuser && useradd -r -g appuser appuser
 
 RUN mkdir -p /serving && chown -R appuser:appuser /serving
 
-COPY --chown=appuser:appuser _service/ /serving/
+COPY --chown=appuser:appuser _serving/ /serving/
 
 WORKDIR /app
 
@@ -44,7 +44,8 @@ COPY --from=builder /app/.venv /app/.venv
 
 COPY --chown=appuser:appuser src/aim/ ./aim
 
-RUN ECHO 'MODEL_BASE_PATH="_serving"' > ./aim/.env
+RUN echo 'MODEL_BASE_PATH="/serving"' > .env && \
+    chown appuser:appuser .env
 
 USER appuser
 
