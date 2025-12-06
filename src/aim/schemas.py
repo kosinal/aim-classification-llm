@@ -36,7 +36,4 @@ class AssessResponse(BaseModel):
         ge=0.0,
         le=1.0,
     )
-    reasoning: str = Field(
-        ..., description="Step-by-step analysis of the assessment"
-    )
     project_id: str = Field(..., description="The project ID for this assessment")

@@ -121,19 +121,17 @@ class TestAssessResponse:
         response = AssessResponse(
             recommend=True,
             recommendation_score=0.85,
-            reasoning="Content is relevant",
             project_id="1",
         )
 
         assert response.recommend is True
         assert response.recommendation_score == 0.85
-        assert response.reasoning == "Content is relevant"
         assert response.project_id == "1"
 
     def test_assess_response_minimum_score(self):
         """Test AssessResponse accepts minimum score of 0.0."""
         response = AssessResponse(
-            recommend=False, recommendation_score=0.0, reasoning="Not relevant", project_id="1"
+            recommend=False, recommendation_score=0.0, project_id="1"
         )
 
         assert response.recommendation_score == 0.0
@@ -141,7 +139,7 @@ class TestAssessResponse:
     def test_assess_response_maximum_score(self):
         """Test AssessResponse accepts maximum score of 1.0."""
         response = AssessResponse(
-            recommend=True, recommendation_score=1.0, reasoning="Highly relevant", project_id="1"
+            recommend=True, recommendation_score=1.0, project_id="1"
         )
 
         assert response.recommendation_score == 1.0
@@ -150,7 +148,7 @@ class TestAssessResponse:
         """Test that score below 0.0 fails validation."""
         with pytest.raises(ValidationError) as exc_info:
             AssessResponse(
-                recommend=False, recommendation_score=-0.1, reasoning="Test", project_id="1"
+                recommend=False, recommendation_score=-0.1, project_id="1"
             )
 
         errors = exc_info.value.errors()
@@ -163,7 +161,7 @@ class TestAssessResponse:
         """Test that score above 1.0 fails validation."""
         with pytest.raises(ValidationError) as exc_info:
             AssessResponse(
-                recommend=True, recommendation_score=1.5, reasoning="Test", project_id="1"
+                recommend=True, recommendation_score=1.5, project_id="1"
             )
 
         errors = exc_info.value.errors()
@@ -180,7 +178,6 @@ class TestAssessResponse:
         errors = exc_info.value.errors()
         field_names = [error["loc"][0] for error in errors]
         assert "recommendation_score" in field_names
-        assert "reasoning" in field_names
         assert "project_id" in field_names
 
     def test_assess_response_recommend_coerced_to_boolean(self):
@@ -189,7 +186,6 @@ class TestAssessResponse:
         response = AssessResponse(
             recommend="yes",
             recommendation_score=0.5,
-            reasoning="Test",
             project_id="1",
         )
         assert isinstance(response.recommend, bool)
@@ -198,7 +194,7 @@ class TestAssessResponse:
     def test_assess_response_score_not_float_coerced(self):
         """Test that integer scores are coerced to float."""
         response = AssessResponse(
-            recommend=True, recommendation_score=1, reasoning="Test", project_id="1"
+            recommend=True, recommendation_score=1, project_id="1"
         )
 
         assert isinstance(response.recommendation_score, float)
@@ -207,40 +203,37 @@ class TestAssessResponse:
     def test_assess_response_model_dump(self):
         """Test dumping AssessResponse to dictionary."""
         response = AssessResponse(
-            recommend=True, recommendation_score=0.75, reasoning="Relevant", project_id="2"
+            recommend=True, recommendation_score=0.75, project_id="2"
         )
         data = response.model_dump()
 
         assert isinstance(data, dict)
         assert data["recommend"] is True
         assert data["recommendation_score"] == 0.75
-        assert data["reasoning"] == "Relevant"
         assert data["project_id"] == "2"
 
     def test_assess_response_model_dump_json(self):
         """Test dumping AssessResponse to JSON."""
         response = AssessResponse(
-            recommend=False, recommendation_score=0.25, reasoning="Not relevant", project_id="3"
+            recommend=False, recommendation_score=0.25, project_id="3"
         )
         json_str = response.model_dump_json()
 
         assert isinstance(json_str, str)
-        assert "Not relevant" in json_str
         assert "0.25" in json_str
+        assert "project_3" in json_str or "3" in json_str
 
     def test_assess_response_from_dict(self):
         """Test creating AssessResponse from dictionary."""
         data = {
             "recommend": True,
             "recommendation_score": 0.9,
-            "reasoning": "Highly relevant content",
             "project_id": "5",
         }
         response = AssessResponse(**data)
 
         assert response.recommend is True
         assert response.recommendation_score == 0.9
-        assert response.reasoning == "Highly relevant content"
         assert response.project_id == "5"
 
     def test_assess_response_edge_case_scores(self):
@@ -251,7 +244,6 @@ class TestAssessResponse:
             response = AssessResponse(
                 recommend=score > 0.5,
                 recommendation_score=score,
-                reasoning="Test",
                 project_id="1",
             )
             assert response.recommendation_score == score

@@ -7,53 +7,48 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from aim.models import FlagClassifier
+from aim.predictor import EmbeddingClassifier
 from aim.routes import router
 from aim.schemas import AssessRequest, AssessResponse
 
 
 @pytest.fixture
-def app_with_models():
-    """Create FastAPI app with mocked models for testing."""
+def app_with_classifier():
+    """Create FastAPI app with mocked classifier for testing."""
     app = FastAPI()
     app.include_router(router)
 
-    # Create mock models
-    mock_model_1 = MagicMock(spec=FlagClassifier)
-    mock_model_2 = MagicMock(spec=FlagClassifier)
+    # Create mock classifier
+    mock_classifier = MagicMock(spec=EmbeddingClassifier)
 
-    # Setup app state with models
-    app.state.models = {
-        "1": mock_model_1,
-        "2": mock_model_2,
-    }
+    # Setup app state with classifier
+    app.state.classifier = mock_classifier
 
-    return app, {"1": mock_model_1, "2": mock_model_2}
+    return app, mock_classifier
 
 
 @pytest.fixture
-def app_without_models():
-    """Create FastAPI app without models for testing."""
+def app_without_classifier():
+    """Create FastAPI app without classifier for testing."""
     app = FastAPI()
     app.include_router(router)
-    app.state.models = None
+    app.state.classifier = None
     return app
 
 
 class TestAssessContentEndpoint:
     """Tests for /api/project/{project_id}/assess endpoint."""
 
-    def test_assess_content_success_positive_prediction(self, app_with_models):
+    def test_assess_content_success_positive_prediction(self, app_with_classifier):
         """Test successful content assessment with positive prediction."""
-        app, models = app_with_models
+        app, mock_classifier = app_with_classifier
         client = TestClient(app)
 
         # Mock prediction response
-        mock_prediction = MagicMock()
-        mock_prediction.reasoning = "Content is highly relevant to project goals"
-        mock_prediction.prediction_score = "0.95"
-        mock_prediction.prediction = "positive"
-        models["1"].return_value = mock_prediction
+        mock_classifier.predict.return_value = {
+            "recommend": True,
+            "recommendation_score": 0.95,
+        }
 
         # Make request
         response = client.post(
@@ -69,20 +64,18 @@ class TestAssessContentEndpoint:
         data = response.json()
         assert data["recommend"] is True
         assert data["recommendation_score"] == 0.95
-        assert data["reasoning"] == "Content is highly relevant to project goals"
-        assert data["project_id"] == "1"
+        assert data["project_id"] == "project_1"
 
-    def test_assess_content_success_negative_prediction(self, app_with_models):
+    def test_assess_content_success_negative_prediction(self, app_with_classifier):
         """Test successful content assessment with negative prediction."""
-        app, models = app_with_models
+        app, mock_classifier = app_with_classifier
         client = TestClient(app)
 
         # Mock prediction response
-        mock_prediction = MagicMock()
-        mock_prediction.reasoning = "Content not relevant to project"
-        mock_prediction.prediction_score = "0.12"
-        mock_prediction.prediction = "negative"
-        models["2"].return_value = mock_prediction
+        mock_classifier.predict.return_value = {
+            "recommend": False,
+            "recommendation_score": 0.12,
+        }
 
         # Make request
         response = client.post(
@@ -98,75 +91,11 @@ class TestAssessContentEndpoint:
         data = response.json()
         assert data["recommend"] is False
         assert data["recommendation_score"] == 0.12
-        assert data["reasoning"] == "Content not relevant to project"
-        assert data["project_id"] == "2"
+        assert data["project_id"] == "project_2"
 
-    def test_assess_content_with_string_score_parsing(self, app_with_models):
-        """Test that string scores are properly converted to float."""
-        app, models = app_with_models
-        client = TestClient(app)
-
-        # Mock prediction with string score
-        mock_prediction = MagicMock()
-        mock_prediction.reasoning = "Analysis complete"
-        mock_prediction.prediction_score = "0.75"  # String instead of float
-        mock_prediction.prediction = "positive"
-        models["1"].return_value = mock_prediction
-
-        response = client.post(
-            "/api/project/1/assess",
-            json={"summary": "Test content", "author": "Test Author", "title": "Test Title"},
-        )
-
-        assert response.status_code == 200
-        data = response.json()
-        assert data["recommendation_score"] == 0.75  # Should be converted to float
-
-    def test_assess_content_with_invalid_score_fallback(self, app_with_models):
-        """Test fallback logic when score parsing fails."""
-        app, models = app_with_models
-        client = TestClient(app)
-
-        # Mock prediction with unparseable score
-        mock_prediction = MagicMock()
-        mock_prediction.reasoning = "Analysis complete"
-        mock_prediction.prediction_score = "invalid"  # Can't convert to float
-        mock_prediction.prediction = "positive"
-        models["1"].return_value = mock_prediction
-
-        response = client.post(
-            "/api/project/1/assess",
-            json={"summary": "Test content", "author": "Test Author", "title": "Test Title"},
-        )
-
-        assert response.status_code == 200
-        data = response.json()
-        assert data["recommendation_score"] == 1.0  # Fallback for positive
-
-    def test_assess_content_with_invalid_score_negative_fallback(self, app_with_models):
-        """Test fallback logic for negative prediction when score parsing fails."""
-        app, models = app_with_models
-        client = TestClient(app)
-
-        # Mock prediction with unparseable score
-        mock_prediction = MagicMock()
-        mock_prediction.reasoning = "Analysis complete"
-        mock_prediction.prediction_score = "invalid"
-        mock_prediction.prediction = "negative"
-        models["1"].return_value = mock_prediction
-
-        response = client.post(
-            "/api/project/1/assess",
-            json={"summary": "Test content", "author": "Test Author", "title": "Test Title"},
-        )
-
-        assert response.status_code == 200
-        data = response.json()
-        assert data["recommendation_score"] == 0.0  # Fallback for negative
-
-    def test_assess_content_models_not_loaded(self, app_without_models):
-        """Test error response when models are not loaded."""
-        client = TestClient(app_without_models)
+    def test_assess_content_classifier_not_loaded(self, app_without_classifier):
+        """Test error response when classifier is not loaded."""
+        client = TestClient(app_without_classifier)
 
         response = client.post(
             "/api/project/1/assess",
@@ -174,29 +103,15 @@ class TestAssessContentEndpoint:
         )
 
         assert response.status_code == 503
-        assert response.json()["detail"] == "Models not loaded yet"
+        assert response.json()["detail"] == "Classifier not loaded yet"
 
-    def test_assess_content_project_not_found(self, app_with_models):
-        """Test error response when project model is not found."""
-        app, _ = app_with_models
-        client = TestClient(app)
-
-        response = client.post(
-            "/api/project/999/assess",
-            json={"summary": "Test content", "author": "Test Author", "title": "Test Title"},
-        )
-
-        assert response.status_code == 404
-        assert "No model found for project 999" in response.json()["detail"]
-        assert "Available projects" in response.json()["detail"]
-
-    def test_assess_content_model_processing_error(self, app_with_models):
+    def test_assess_content_model_processing_error(self, app_with_classifier):
         """Test error response when model processing fails."""
-        app, models = app_with_models
+        app, mock_classifier = app_with_classifier
         client = TestClient(app)
 
-        # Mock model to raise exception
-        models["1"].side_effect = Exception("Model processing error")
+        # Mock classifier to raise exception
+        mock_classifier.predict.side_effect = Exception("Embedding generation failed")
 
         response = client.post(
             "/api/project/1/assess",
@@ -204,11 +119,11 @@ class TestAssessContentEndpoint:
         )
 
         assert response.status_code == 500
-        assert "Model processing error" in response.json()["detail"]
+        assert "Embedding generation failed" in response.json()["detail"]
 
-    def test_assess_content_validates_request_schema(self, app_with_models):
+    def test_assess_content_validates_request_schema(self, app_with_classifier):
         """Test that request schema validation works."""
-        app, _ = app_with_models
+        app, _ = app_with_classifier
         client = TestClient(app)
 
         # Empty summary should fail validation
@@ -219,9 +134,9 @@ class TestAssessContentEndpoint:
 
         assert response.status_code == 422  # Validation error
 
-    def test_assess_content_missing_summary_field(self, app_with_models):
+    def test_assess_content_missing_summary_field(self, app_with_classifier):
         """Test error when summary field is missing."""
-        app, _ = app_with_models
+        app, _ = app_with_classifier
         client = TestClient(app)
 
         response = client.post(
@@ -230,9 +145,9 @@ class TestAssessContentEndpoint:
 
         assert response.status_code == 422  # Validation error
 
-    def test_assess_content_missing_author_field(self, app_with_models):
+    def test_assess_content_missing_author_field(self, app_with_classifier):
         """Test error when author field is missing."""
-        app, _ = app_with_models
+        app, _ = app_with_classifier
         client = TestClient(app)
 
         response = client.post(
@@ -241,9 +156,9 @@ class TestAssessContentEndpoint:
 
         assert response.status_code == 422  # Validation error
 
-    def test_assess_content_missing_title_field(self, app_with_models):
+    def test_assess_content_missing_title_field(self, app_with_classifier):
         """Test error when title field is missing."""
-        app, _ = app_with_models
+        app, _ = app_with_classifier
         client = TestClient(app)
 
         response = client.post(
@@ -252,32 +167,26 @@ class TestAssessContentEndpoint:
 
         assert response.status_code == 422  # Validation error
 
-    def test_assess_content_missing_all_fields(self, app_with_models):
+    def test_assess_content_missing_all_fields(self, app_with_classifier):
         """Test error when all required fields are missing."""
-        app, _ = app_with_models
+        app, _ = app_with_classifier
         client = TestClient(app)
 
         response = client.post("/api/project/1/assess", json={})
 
         assert response.status_code == 422  # Validation error
 
-    def test_assess_content_with_different_project_ids(self, app_with_models):
-        """Test that correct model is used for different project IDs."""
-        app, models = app_with_models
+    def test_assess_content_with_different_project_ids(self, app_with_classifier):
+        """Test that correct project_id format is used for different project IDs."""
+        app, mock_classifier = app_with_classifier
         client = TestClient(app)
 
-        # Setup different responses for different models
-        mock_pred_1 = MagicMock()
-        mock_pred_1.reasoning = "Project 1 analysis"
-        mock_pred_1.prediction_score = "0.8"
-        mock_pred_1.prediction = "positive"
-        models["1"].return_value = mock_pred_1
-
-        mock_pred_2 = MagicMock()
-        mock_pred_2.reasoning = "Project 2 analysis"
-        mock_pred_2.prediction_score = "0.3"
-        mock_pred_2.prediction = "negative"
-        models["2"].return_value = mock_pred_2
+        # Setup response
+        mock_classifier.predict.return_value = {
+            "recommend": True,
+            "recommendation_score": 0.8,
+            "reasoning": "Test reasoning",
+        }
 
         # Test project 1
         response1 = client.post(
@@ -285,58 +194,31 @@ class TestAssessContentEndpoint:
             json={"summary": "Test 1", "author": "Author 1", "title": "Title 1"},
         )
         assert response1.status_code == 200
-        assert response1.json()["project_id"] == "1"
-        assert response1.json()["reasoning"] == "Project 1 analysis"
+        assert response1.json()["project_id"] == "project_1"
 
-        # Test project 2
+        # Test project 3
         response2 = client.post(
-            "/api/project/2/assess",
-            json={"summary": "Test 2", "author": "Author 2", "title": "Title 2"},
+            "/api/project/3/assess",
+            json={"summary": "Test 3", "author": "Author 3", "title": "Title 3"},
         )
         assert response2.status_code == 200
-        assert response2.json()["project_id"] == "2"
-        assert response2.json()["reasoning"] == "Project 2 analysis"
+        assert response2.json()["project_id"] == "project_3"
 
-        # Verify correct models were called
-        assert models["1"].called
-        assert models["2"].called
+        # Verify classifier was called with correct project_id format
+        calls = mock_classifier.predict.call_args_list
+        assert calls[0].kwargs["project_id"] == "project_1"
+        assert calls[1].kwargs["project_id"] == "project_3"
 
-    def test_assess_content_case_insensitive_prediction(self, app_with_models):
-        """Test that prediction comparison is case-insensitive."""
-        app, models = app_with_models
+    def test_assess_content_calls_classifier_with_correct_args(self, app_with_classifier):
+        """Test that classifier is called with correctly formatted arguments."""
+        app, mock_classifier = app_with_classifier
         client = TestClient(app)
 
-        # Test with uppercase POSITIVE
-        mock_prediction = MagicMock()
-        mock_prediction.reasoning = "Test"
-        mock_prediction.prediction_score = "0.9"
-        mock_prediction.prediction = "POSITIVE"
-        models["1"].return_value = mock_prediction
-
-        response = client.post(
-            "/api/project/1/assess",
-            json={"summary": "Test", "author": "Test Author", "title": "Test Title"},
-        )
-        assert response.json()["recommend"] is True
-
-        # Test with mixed case Negative
-        mock_prediction.prediction = "Negative"
-        response = client.post(
-            "/api/project/1/assess",
-            json={"summary": "Test", "author": "Test Author", "title": "Test Title"},
-        )
-        assert response.json()["recommend"] is False
-
-    def test_assess_content_formats_input_correctly(self, app_with_models):
-        """Test that author, title, and summary are formatted correctly for the model."""
-        app, models = app_with_models
-        client = TestClient(app)
-
-        mock_prediction = MagicMock()
-        mock_prediction.reasoning = "Test"
-        mock_prediction.prediction_score = "0.8"
-        mock_prediction.prediction = "positive"
-        models["1"].return_value = mock_prediction
+        mock_classifier.predict.return_value = {
+            "recommend": True,
+            "recommendation_score": 0.8,
+            "reasoning": "Test",
+        }
 
         client.post(
             "/api/project/1/assess",
@@ -347,11 +229,32 @@ class TestAssessContentEndpoint:
             },
         )
 
-        # Verify the model was called with correctly formatted string
-        models["1"].assert_called_once()
-        call_args = models["1"].call_args
-        assert call_args.kwargs["project_id"] == "1"
-        assert (
-            call_args.kwargs["summary"]
-            == "Author:Jane Doe\nTitle:Test Article Title\nSummary:Test summary content"
+        # Verify the classifier was called with correct arguments
+        mock_classifier.predict.assert_called_once_with(
+            project_id="project_1",
+            author="Jane Doe",
+            title="Test Article Title",
+            summary="Test summary content",
         )
+
+    def test_assess_content_with_low_threshold_score(self, app_with_classifier):
+        """Test prediction with low score near threshold."""
+        app, mock_classifier = app_with_classifier
+        client = TestClient(app)
+
+        # Low score but above 0.10 threshold
+        mock_classifier.predict.return_value = {
+            "recommend": True,
+            "recommendation_score": 0.12,
+            "reasoning": "Marginally recommended",
+        }
+
+        response = client.post(
+            "/api/project/1/assess",
+            json={"summary": "Test", "author": "Test", "title": "Test"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["recommend"] is True
+        assert data["recommendation_score"] == 0.12

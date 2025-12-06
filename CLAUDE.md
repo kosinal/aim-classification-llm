@@ -2,6 +2,23 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Feature Implementation System Guidelines
+
+### Feature Implementation Priority Rules
+- IMMEDIATE EXECUTION: Launch parallel Tasks immediately upon feature requests
+- CLARIFICATION: Ask if something is not clear or is ambiguous
+
+### Context Optimization Rules
+- Strip out all comments when reading code files for analysis
+- Each task handles ONLY specified files or file types
+
+### Feature Implementation Guidelines
+- **CRITICAL**: Make MINIMAL CHANGES to existing patterns and structures
+- **CRITICAL**: Preserve existing naming conventions and file organization
+- Follow project's established architecture and component patterns
+- Use existing utility functions and avoid duplicating functionality
+- At the end of the implementation, check the result with `make test` and fix all errors and warnings.
+
 ## Project Overview
 
 This is a **content recommendation classifier API** built with FastAPI and DSPy (Declarative Self-improving Language Programs). The system uses Azure OpenAI to classify content summaries and determine if they should be recommended to users, with separate fine-tuned models for different projects.

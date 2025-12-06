@@ -22,6 +22,7 @@ from tqdm import tqdm
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 import matplotlib.pyplot as plt
 import seaborn as sns
+import numpy as np
 
 # %%
 # #!poetry add seaborn --group dev
@@ -42,13 +43,13 @@ print(f"Pos/Neg ratio: {len(input_data['positives'])}/{len(input_data['negatives
 # %%
 
 # %%
-model_name = "gpt-5-hiring"
-mini_model_name = "gpt-5-mini-hiring"
-llm_client = client = AzureOpenAI(
-    api_version="2025-03-01-preview",
-    azure_endpoint="https://aim-australia-east.openai.azure.com/",
-    api_key=os.environ["AIM_OPENAI_KEY"]
-)
+# model_name = "gpt-5-hiring"
+# mini_model_name = "gpt-5-mini-hiring"
+# llm_client = client = AzureOpenAI(
+#     api_version="2025-03-01-preview",
+#     azure_endpoint="https://aim-australia-east.openai.azure.com/",
+#     api_key=os.environ["AIM_OPENAI_KEY"]
+# )
 
 # %%
 
@@ -139,10 +140,19 @@ all_data['flag_insightful'] = insightful_vals
 all_data[(all_data.flag_insightful != "") & (all_data.label == "negative")]
 
 # %%
-all_data[(all_data.flag_insightful != "") & (all_data.label != "negative")]
+all_data[(all_data.flag_insightful != "")].flag_insightful.unique()
+
+# %%
+all_data.label = np.where((all_data.flag_insightful == "Too old"), "positive", all_data.label)
+
+# %%
+all_data[(all_data.flag_insightful == "Too old")]
 
 # %%
 # Ok, flags are only for negatives, so it wont help us much
+
+# %%
+all_data[(all_data.flag_insightful != "") & (all_data.label == "negative")]
 
 # %% [markdown]
 # # Confusion Matrix: isFlagged vs Label
@@ -185,3 +195,5 @@ all_data['author'] = all_data['author'].fillna("Unknown Author")
 
 # %%
 all_data.to_parquet(data_folder / "data.parquet")
+
+# %%

@@ -1,20 +1,8 @@
 """Tests for main FastAPI application."""
 
-import re
-
-from contextlib import asynccontextmanager
-from pathlib import Path
-from typing import AsyncGenerator
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
-
-import dspy
-import pytest
-
-from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from aim.main import app, lifespan
-from aim.models import FlagClassifier
+from aim.main import app
 
 
 client = TestClient(app)
@@ -33,12 +21,10 @@ def test_health_check():
     assert response.status_code == 200
     response_data = response.json()
     assert response_data["status"] == "healthy"
-    assert "models_loaded" in response_data
-    assert "model_count" in response_data
-    assert "project_ids" in response_data
-    assert isinstance(response_data["models_loaded"], bool)
-    assert isinstance(response_data["model_count"], int)
-    assert isinstance(response_data["project_ids"], list)
+    assert "classifier_loaded" in response_data
+    assert "model_type" in response_data
+    assert "threshold" in response_data
+    assert isinstance(response_data["classifier_loaded"], bool)
 
 
 class TestLifespan:
@@ -49,15 +35,15 @@ class TestLifespan:
         # The app should have our lifespan configured
         assert app.router.lifespan_context is not None
 
-    def test_health_check_reflects_model_state(self):
-        """Test health endpoint reflects actual model state from lifespan."""
+    def test_health_check_reflects_classifier_state(self):
+        """Test health endpoint reflects actual classifier state from lifespan."""
         # This test uses the actual app with real lifespan
-        # Models are loaded during lifespan startup
+        # Classifier may or may not be loaded depending on test environment
         response = client.get("/health")
         assert response.status_code == 200
         data = response.json()
 
-        # These fields must exist regardless of model loading success
-        assert "models_loaded" in data
-        assert "model_count" in data
-        assert "project_ids" in data
+        # These fields must exist regardless of classifier loading success
+        assert "classifier_loaded" in data
+        assert "model_type" in data
+        assert "threshold" in data

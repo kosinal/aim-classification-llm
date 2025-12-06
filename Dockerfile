@@ -34,11 +34,17 @@ ENV PYTHONUNBUFFERED=1 \
 
 RUN groupadd -r appuser && useradd -r -g appuser appuser
 
+RUN mkdir -p /serving && chown -R appuser:appuser /serving
+
+COPY --chown=appuser:appuser _service/ /serving/
+
 WORKDIR /app
 
 COPY --from=builder /app/.venv /app/.venv
 
 COPY --chown=appuser:appuser src/aim/ ./aim
+
+RUN ECHO 'MODEL_BASE_PATH="_serving"' > ./aim/.env
 
 USER appuser
 
