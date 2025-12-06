@@ -7,7 +7,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from aim.predictor import EmbeddingClassifier
+from aim.predictor import EmbeddingClassifier, UnsupportedProjectError
 from aim.routes import router
 from aim.schemas import AssessRequest, AssessResponse
 
@@ -258,3 +258,25 @@ class TestAssessContentEndpoint:
         data = response.json()
         assert data["recommend"] is True
         assert data["recommendation_score"] == 0.12
+
+    def test_assess_content_unsupported_project_returns_404(self, app_with_classifier):
+        """Test that unsupported project_id returns 404 status code."""
+        app, mock_classifier = app_with_classifier
+        client = TestClient(app)
+
+        # Mock classifier to raise UnsupportedProjectError
+        mock_classifier.predict.side_effect = UnsupportedProjectError(
+            project_id="project_99",
+            supported_projects=["project_1", "project_2", "project_3"],
+        )
+
+        response = client.post(
+            "/api/project/99/assess",
+            json={"summary": "Test content", "author": "Test Author", "title": "Test Title"},
+        )
+
+        assert response.status_code == 404
+        detail = response.json()["detail"]
+        assert "project_99" in detail
+        assert "not supported" in detail
+        assert "project_1, project_2, project_3" in detail

@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 import xgboost as xgb
 
-from aim.predictor import EmbeddingClassifier
+from aim.predictor import EmbeddingClassifier, UnsupportedProjectError
 
 
 @pytest.fixture
@@ -21,8 +21,9 @@ def mock_classifier_components(tmp_path):
     model_path.write_text("{}")
     embedding_path.mkdir()
 
-    # Mock encoder
+    # Mock encoder with supported projects
     mock_encoder = MagicMock()
+    mock_encoder.categories_ = [np.array(["project_1", "project_2", "project_3", "project_4"])]
     mock_encoder.transform.return_value = np.array([[1, 0, 0, 0]])
 
     return {
@@ -262,3 +263,47 @@ class TestEmbeddingClassifier:
         assert "Author: Unknown" in text
         assert "Title: " in text
         assert "Summary: " in text
+
+    @patch("aim.predictor.SentenceTransformer")
+    @patch("aim.predictor.xgb.Booster")
+    @patch("builtins.open")
+    @patch("aim.predictor.pickle.load")
+    def test_predict_raises_error_for_unsupported_project(
+        self, mock_pickle_load, mock_open, mock_booster_class, mock_sentence_transformer_class, mock_classifier_components
+    ):
+        """Test that UnsupportedProjectError is raised for unsupported project_id."""
+        components = mock_classifier_components
+
+        # Setup mocks with supported projects
+        mock_encoder = MagicMock()
+        mock_encoder.categories_ = [np.array(["project_1", "project_2", "project_3"])]
+        mock_encoder.transform.return_value = np.array([[1, 0, 0]])
+        mock_pickle_load.return_value = mock_encoder
+
+        mock_embedding_model = MagicMock()
+        mock_sentence_transformer_class.return_value = mock_embedding_model
+
+        mock_booster = MagicMock()
+        mock_booster_class.return_value = mock_booster
+
+        classifier = EmbeddingClassifier(
+            model_path=components["model_path"],
+            encoder_path=components["encoder_path"],
+            embedding_model_path=components["embedding_path"],
+            threshold=0.5,
+        )
+
+        # Test with unsupported project_id
+        with pytest.raises(UnsupportedProjectError) as exc_info:
+            classifier.predict(
+                project_id="project_99",
+                author="Test",
+                title="Test",
+                summary="Test",
+            )
+
+        assert exc_info.value.project_id == "project_99"
+        assert exc_info.value.supported_projects == ["project_1", "project_2", "project_3"]
+        assert "project_99" in str(exc_info.value)
+        assert "not supported" in str(exc_info.value)
+        assert "project_1, project_2, project_3" in str(exc_info.value)

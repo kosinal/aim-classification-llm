@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, HTTPException, Request
 
-from aim.predictor import EmbeddingClassifier
+from aim.predictor import EmbeddingClassifier, UnsupportedProjectError
 from aim.schemas import AssessRequest, AssessResponse
 
 
@@ -51,5 +51,7 @@ async def assess_content(
             project_id=project_id_str,
         )
 
+    except UnsupportedProjectError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e

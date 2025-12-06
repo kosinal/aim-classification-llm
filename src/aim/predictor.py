@@ -12,6 +12,26 @@ from sentence_transformers import SentenceTransformer
 from sklearn.preprocessing import OneHotEncoder
 
 
+class UnsupportedProjectError(Exception):
+    """Raised when a project_id is not supported by the encoder."""
+
+    def __init__(self, project_id: str, supported_projects: list[str]) -> None:
+        """
+        Initialize the exception.
+
+        Args:
+            project_id: The unsupported project identifier
+            supported_projects: List of supported project identifiers
+        """
+        self.project_id = project_id
+        self.supported_projects = supported_projects
+        message = (
+            f"Project '{project_id}' is not supported. "
+            f"Supported projects: {', '.join(supported_projects)}"
+        )
+        super().__init__(message)
+
+
 class EmbeddingClassifier:
     """XGBoost classifier using sentence embeddings and project encoding."""
 
@@ -61,7 +81,15 @@ class EmbeddingClassifier:
                 - recommend: bool (whether to recommend)
                 - recommendation_score: float (probability 0-1)
                 - reasoning: str (explanation of prediction)
+
+        Raises:
+            UnsupportedProjectError: If project_id is not supported by the encoder
         """
+        # Validate project_id is supported
+        supported_projects = self.encoder.categories_[0].tolist()
+        if project_id not in supported_projects:
+            raise UnsupportedProjectError(project_id, supported_projects)
+
         # Prepare combined text (matching training format)
         combined_text = (
             f"Author: {author if author else 'Unknown'}\n"
