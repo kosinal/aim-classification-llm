@@ -23,35 +23,36 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:  # pragm
     """
     Lifespan context manager for FastAPI application.
 
-    Handles XGBoost model loading on startup and cleanup on shutdown.
+    Handles XGBoost per-project model loading on startup and cleanup on shutdown.
     """
-    logger.info("Loading XGBoost embedding classifier...")
+    logger.info("Loading XGBoost per-project embedding classifiers...")
 
     # Get paths to model artifacts
-    data_dir = Path(config.settings.model_base_path)
+    models_dir = Path(config.settings.model_base_path)
+    embedding_model_path = models_dir / "_emb"
+    thresholds_path = models_dir / "xgb_project_optimal_thresholds.pkl"
 
-    model_path = data_dir / "xgboost_model.json"
-    encoder_path = data_dir / "project_encoder.pkl"
-    embedding_model_path = data_dir / "_emb"
-
-    # Verify all required files exist
-    if not model_path.exists():
-        raise FileNotFoundError(f"XGBoost model not found at {model_path}")
-    if not encoder_path.exists():
-        raise FileNotFoundError(f"Project encoder not found at {encoder_path}")
+    # Verify required paths exist
+    if not models_dir.exists():
+        raise FileNotFoundError(f"Models directory not found at {models_dir}")
     if not embedding_model_path.exists():
         raise FileNotFoundError(f"Embedding model not found at {embedding_model_path}")
+    if not thresholds_path.exists():
+        raise FileNotFoundError(f"Thresholds file not found at {thresholds_path}")
 
-    # Load the classifier (threshold optimized from notebook: 0.10 for max recall)
+    # Load the classifier with per-project models
     classifier = EmbeddingClassifier(
-        model_path=model_path,
-        encoder_path=encoder_path,
+        models_dir=models_dir,
         embedding_model_path=embedding_model_path,
-        threshold=0.10,
+        thresholds_path=thresholds_path,
+        default_threshold=0.1,
     )
 
     application.state.classifier = classifier
-    logger.info("XGBoost embedding classifier loaded successfully")
+    logger.info(
+        f"XGBoost embedding classifiers loaded successfully for projects: "
+        f"{', '.join(classifier.supported_projects)}"
+    )
 
     yield
 
@@ -80,12 +81,27 @@ async def root() -> dict:
 async def health_check() -> dict:
     """Health check endpoint."""
     classifier_loaded = hasattr(app.state, "classifier") and app.state.classifier is not None
-    return {
-        "status": "healthy",
-        "classifier_loaded": classifier_loaded,
-        "model_type": "xgboost_embedding" if classifier_loaded else None,
-        "threshold": app.state.classifier.threshold if classifier_loaded else None,
-    }
+
+    if classifier_loaded:
+        classifier = app.state.classifier
+        project_thresholds = {
+            project_id: classifier.get_threshold(project_id)
+            for project_id in classifier.supported_projects
+        }
+        return {
+            "status": "healthy",
+            "classifier_loaded": True,
+            "model_type": "xgboost_embedding_per_project",
+            "loaded_projects": classifier.supported_projects,
+            "project_thresholds": project_thresholds,
+            "default_threshold": classifier.default_threshold,
+        }
+    else:
+        return {
+            "status": "healthy",
+            "classifier_loaded": False,
+            "model_type": None,
+        }
 
 
 if __name__ == "__main__":  # pragma: no cover

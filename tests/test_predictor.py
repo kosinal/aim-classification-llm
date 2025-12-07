@@ -12,25 +12,22 @@ from aim.predictor import EmbeddingClassifier, UnsupportedProjectError
 @pytest.fixture
 def mock_classifier_components(tmp_path):
     """Create mock classifier components for testing."""
-    # Create mock files
-    model_path = tmp_path / "model.json"
-    encoder_path = tmp_path / "encoder.pkl"
+    # Create mock files and directories
+    models_dir = tmp_path / "models"
+    models_dir.mkdir()
     embedding_path = tmp_path / "embeddings"
-
-    # Create dummy files
-    model_path.write_text("{}")
     embedding_path.mkdir()
+    thresholds_path = tmp_path / "thresholds.pkl"
 
-    # Mock encoder with supported projects
-    mock_encoder = MagicMock()
-    mock_encoder.categories_ = [np.array(["project_1", "project_2", "project_3", "project_4"])]
-    mock_encoder.transform.return_value = np.array([[1, 0, 0, 0]])
+    # Create dummy model files for multiple projects
+    for project_id in ["project_1", "project_2", "project_3", "project_4"]:
+        model_file = models_dir / f"xgb_embedding_classifier_project_{project_id}.json"
+        model_file.write_text("{}")
 
     return {
-        "model_path": model_path,
-        "encoder_path": encoder_path,
+        "models_dir": models_dir,
         "embedding_path": embedding_path,
-        "mock_encoder": mock_encoder,
+        "thresholds_path": thresholds_path,
     }
 
 
@@ -39,40 +36,37 @@ class TestEmbeddingClassifier:
 
     @patch("aim.predictor.SentenceTransformer")
     @patch("aim.predictor.xgb.Booster")
-    @patch("builtins.open")
-    @patch("aim.predictor.pickle.load")
     def test_initialization(
-        self, mock_pickle_load, mock_open, mock_booster, mock_sentence_transformer, mock_classifier_components
+        self, mock_booster_class, mock_sentence_transformer, mock_classifier_components
     ):
         """Test EmbeddingClassifier initialization."""
         components = mock_classifier_components
-        mock_pickle_load.return_value = components["mock_encoder"]
+
+        # Setup mock booster
+        mock_booster = MagicMock()
+        mock_booster_class.return_value = mock_booster
 
         classifier = EmbeddingClassifier(
-            model_path=components["model_path"],
-            encoder_path=components["encoder_path"],
+            models_dir=components["models_dir"],
             embedding_model_path=components["embedding_path"],
-            threshold=0.5,
+            default_threshold=0.5,
         )
 
-        assert classifier.threshold == 0.5
-        assert mock_booster.called
+        assert classifier.default_threshold == 0.5
+        assert len(classifier.models) == 4
+        assert set(classifier.supported_projects) == {"project_1", "project_2", "project_3", "project_4"}
+        assert mock_booster_class.called
         assert mock_sentence_transformer.called
 
     @patch("aim.predictor.SentenceTransformer")
     @patch("aim.predictor.xgb.Booster")
-    @patch("builtins.open")
-    @patch("aim.predictor.pickle.load")
     def test_predict_positive_recommendation(
-        self, mock_pickle_load, mock_open, mock_booster_class, mock_sentence_transformer_class, mock_classifier_components
+        self, mock_booster_class, mock_sentence_transformer_class, mock_classifier_components
     ):
         """Test prediction with positive recommendation."""
         components = mock_classifier_components
 
         # Setup mocks
-        mock_encoder = components["mock_encoder"]
-        mock_pickle_load.return_value = mock_encoder
-
         mock_embedding_model = MagicMock()
         mock_embedding_model.encode.return_value = np.random.rand(1, 384)
         mock_sentence_transformer_class.return_value = mock_embedding_model
@@ -82,10 +76,9 @@ class TestEmbeddingClassifier:
         mock_booster_class.return_value = mock_booster
 
         classifier = EmbeddingClassifier(
-            model_path=components["model_path"],
-            encoder_path=components["encoder_path"],
+            models_dir=components["models_dir"],
             embedding_model_path=components["embedding_path"],
-            threshold=0.5,
+            default_threshold=0.5,
         )
 
         result = classifier.predict(
@@ -100,18 +93,13 @@ class TestEmbeddingClassifier:
 
     @patch("aim.predictor.SentenceTransformer")
     @patch("aim.predictor.xgb.Booster")
-    @patch("builtins.open")
-    @patch("aim.predictor.pickle.load")
     def test_predict_negative_recommendation(
-        self, mock_pickle_load, mock_open, mock_booster_class, mock_sentence_transformer_class, mock_classifier_components
+        self, mock_booster_class, mock_sentence_transformer_class, mock_classifier_components
     ):
         """Test prediction with negative recommendation."""
         components = mock_classifier_components
 
         # Setup mocks
-        mock_encoder = components["mock_encoder"]
-        mock_pickle_load.return_value = mock_encoder
-
         mock_embedding_model = MagicMock()
         mock_embedding_model.encode.return_value = np.random.rand(1, 384)
         mock_sentence_transformer_class.return_value = mock_embedding_model
@@ -121,10 +109,9 @@ class TestEmbeddingClassifier:
         mock_booster_class.return_value = mock_booster
 
         classifier = EmbeddingClassifier(
-            model_path=components["model_path"],
-            encoder_path=components["encoder_path"],
+            models_dir=components["models_dir"],
             embedding_model_path=components["embedding_path"],
-            threshold=0.5,
+            default_threshold=0.5,
         )
 
         result = classifier.predict(
@@ -139,17 +126,20 @@ class TestEmbeddingClassifier:
 
     @patch("aim.predictor.SentenceTransformer")
     @patch("aim.predictor.xgb.Booster")
-    @patch("builtins.open")
-    @patch("aim.predictor.pickle.load")
     def test_predict_with_low_threshold(
-        self, mock_pickle_load, mock_open, mock_booster_class, mock_sentence_transformer_class, mock_classifier_components
+        self, mock_booster_class, mock_sentence_transformer_class, mock_classifier_components
     ):
-        """Test prediction with low threshold (0.10 from notebook)."""
+        """Test prediction with per-project threshold loaded from file."""
+        import pickle
         components = mock_classifier_components
 
-        # Setup mocks
-        mock_encoder = components["mock_encoder"]
-        mock_pickle_load.return_value = mock_encoder
+        # Setup thresholds data and write to file
+        thresholds_data = {
+            "project_1": {"threshold": 0.10, "recall": 0.95, "precision": 0.70, "f1": 0.81},
+            "project_2": {"threshold": 0.15, "recall": 0.92, "precision": 0.75, "f1": 0.83},
+        }
+        with open(components["thresholds_path"], "wb") as f:
+            pickle.dump(thresholds_data, f)
 
         mock_embedding_model = MagicMock()
         mock_embedding_model.encode.return_value = np.random.rand(1, 384)
@@ -160,10 +150,10 @@ class TestEmbeddingClassifier:
         mock_booster_class.return_value = mock_booster
 
         classifier = EmbeddingClassifier(
-            model_path=components["model_path"],
-            encoder_path=components["encoder_path"],
+            models_dir=components["models_dir"],
             embedding_model_path=components["embedding_path"],
-            threshold=0.10,  # Low threshold from notebook
+            thresholds_path=components["thresholds_path"],
+            default_threshold=0.5,
         )
 
         result = classifier.predict(
@@ -173,23 +163,19 @@ class TestEmbeddingClassifier:
             summary="Test",
         )
 
-        assert result["recommend"] is True  # Should be True with low threshold
+        assert result["recommend"] is True  # Should be True with low threshold (0.12 >= 0.10)
         assert result["recommendation_score"] == 0.12
+        assert classifier.get_threshold("project_1") == 0.10
 
     @patch("aim.predictor.SentenceTransformer")
     @patch("aim.predictor.xgb.Booster")
-    @patch("builtins.open")
-    @patch("aim.predictor.pickle.load")
     def test_predict_formats_text_correctly(
-        self, mock_pickle_load, mock_open, mock_booster_class, mock_sentence_transformer_class, mock_classifier_components
+        self, mock_booster_class, mock_sentence_transformer_class, mock_classifier_components
     ):
         """Test that input text is formatted correctly."""
         components = mock_classifier_components
 
         # Setup mocks
-        mock_encoder = components["mock_encoder"]
-        mock_pickle_load.return_value = mock_encoder
-
         mock_embedding_model = MagicMock()
         mock_embedding_model.encode.return_value = np.random.rand(1, 384)
         mock_sentence_transformer_class.return_value = mock_embedding_model
@@ -199,10 +185,9 @@ class TestEmbeddingClassifier:
         mock_booster_class.return_value = mock_booster
 
         classifier = EmbeddingClassifier(
-            model_path=components["model_path"],
-            encoder_path=components["encoder_path"],
+            models_dir=components["models_dir"],
             embedding_model_path=components["embedding_path"],
-            threshold=0.5,
+            default_threshold=0.5,
         )
 
         classifier.predict(
@@ -223,18 +208,13 @@ class TestEmbeddingClassifier:
 
     @patch("aim.predictor.SentenceTransformer")
     @patch("aim.predictor.xgb.Booster")
-    @patch("builtins.open")
-    @patch("aim.predictor.pickle.load")
     def test_predict_handles_none_values(
-        self, mock_pickle_load, mock_open, mock_booster_class, mock_sentence_transformer_class, mock_classifier_components
+        self, mock_booster_class, mock_sentence_transformer_class, mock_classifier_components
     ):
         """Test that None values are handled correctly."""
         components = mock_classifier_components
 
         # Setup mocks
-        mock_encoder = components["mock_encoder"]
-        mock_pickle_load.return_value = mock_encoder
-
         mock_embedding_model = MagicMock()
         mock_embedding_model.encode.return_value = np.random.rand(1, 384)
         mock_sentence_transformer_class.return_value = mock_embedding_model
@@ -244,10 +224,9 @@ class TestEmbeddingClassifier:
         mock_booster_class.return_value = mock_booster
 
         classifier = EmbeddingClassifier(
-            model_path=components["model_path"],
-            encoder_path=components["encoder_path"],
+            models_dir=components["models_dir"],
             embedding_model_path=components["embedding_path"],
-            threshold=0.5,
+            default_threshold=0.5,
         )
 
         classifier.predict(
@@ -266,20 +245,13 @@ class TestEmbeddingClassifier:
 
     @patch("aim.predictor.SentenceTransformer")
     @patch("aim.predictor.xgb.Booster")
-    @patch("builtins.open")
-    @patch("aim.predictor.pickle.load")
     def test_predict_raises_error_for_unsupported_project(
-        self, mock_pickle_load, mock_open, mock_booster_class, mock_sentence_transformer_class, mock_classifier_components
+        self, mock_booster_class, mock_sentence_transformer_class, mock_classifier_components
     ):
         """Test that UnsupportedProjectError is raised for unsupported project_id."""
         components = mock_classifier_components
 
-        # Setup mocks with supported projects
-        mock_encoder = MagicMock()
-        mock_encoder.categories_ = [np.array(["project_1", "project_2", "project_3"])]
-        mock_encoder.transform.return_value = np.array([[1, 0, 0]])
-        mock_pickle_load.return_value = mock_encoder
-
+        # Setup mocks
         mock_embedding_model = MagicMock()
         mock_sentence_transformer_class.return_value = mock_embedding_model
 
@@ -287,10 +259,9 @@ class TestEmbeddingClassifier:
         mock_booster_class.return_value = mock_booster
 
         classifier = EmbeddingClassifier(
-            model_path=components["model_path"],
-            encoder_path=components["encoder_path"],
+            models_dir=components["models_dir"],
             embedding_model_path=components["embedding_path"],
-            threshold=0.5,
+            default_threshold=0.5,
         )
 
         # Test with unsupported project_id
@@ -303,7 +274,6 @@ class TestEmbeddingClassifier:
             )
 
         assert exc_info.value.project_id == "project_99"
-        assert exc_info.value.supported_projects == ["project_1", "project_2", "project_3"]
+        assert set(exc_info.value.supported_projects) == {"project_1", "project_2", "project_3", "project_4"}
         assert "project_99" in str(exc_info.value)
         assert "not supported" in str(exc_info.value)
-        assert "project_1, project_2, project_3" in str(exc_info.value)

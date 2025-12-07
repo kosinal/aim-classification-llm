@@ -23,8 +23,15 @@ def test_health_check():
     assert response_data["status"] == "healthy"
     assert "classifier_loaded" in response_data
     assert "model_type" in response_data
-    assert "threshold" in response_data
     assert isinstance(response_data["classifier_loaded"], bool)
+
+    # If classifier is loaded, check for new per-project fields
+    if response_data["classifier_loaded"]:
+        assert "loaded_projects" in response_data
+        assert "project_thresholds" in response_data
+        assert "default_threshold" in response_data
+        assert isinstance(response_data["loaded_projects"], list)
+        assert isinstance(response_data["project_thresholds"], dict)
 
 
 class TestLifespan:
@@ -46,4 +53,9 @@ class TestLifespan:
         # These fields must exist regardless of classifier loading success
         assert "classifier_loaded" in data
         assert "model_type" in data
-        assert "threshold" in data
+
+        # If classifier is loaded, check for new per-project fields
+        if data["classifier_loaded"]:
+            assert "loaded_projects" in data
+            assert "project_thresholds" in data
+            assert "default_threshold" in data
